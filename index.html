@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Turni Pizzeria - Gestione e Generatore Equo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div>
+        <h1>Turni Pizzeria</h1>
+        <p class="subtitle">Pianificazione mensile basata su target turni, indisponibilita e pesi fatica</p>
+      </div>
+    </div>
+
+    <div class="topbar-controls">
+      <div class="control-group">
+        <label for="startDateInput">Lunedì inizio calendario</label>
+        <input type="date" id="startDateInput" value="2026-11-30" />
+      </div>
+      <div class="control-group">
+        <label for="weeksCountSelect">Settimane</label>
+        <select id="weeksCountSelect">
+          <option value="4">4 settimane (88 turni)</option>
+          <option value="5" selected>5 settimane (110 turni)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="monthLabelInput">Etichetta mese storico</label>
+        <input type="text" id="monthLabelInput" value="dic 2026" placeholder="es. dic 2026" />
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <button id="btnGenerate" class="btn btn-green" title="Genera automaticamente i turni rispettando vincoli e punti">
+        Genera Turni
+      </button>
+      <button id="btnSaveArchive" class="btn btn-blue" title="Registra turni e punti del mese nello storico">
+        Salva nello Storico
+      </button>
+      <button id="btnClearCalendar" class="btn btn-red" title="Svuota i turni del calendario corrente">
+        Pulisci Calendario
+      </button>
+      <button id="btnExportCsv" class="btn btn-outline" title="Scarica il calendario in formato CSV">
+        Esporta CSV
+      </button>
+      <button id="btnPrint" class="btn btn-outline" title="Stampa il calendario">
+        Stampa
+      </button>
+    </div>
+  </header>
+
+  <nav class="tabs-nav" aria-label="Sezioni applicazione">
+    <button class="tab-btn active" data-tab="tab-calendario">1. Calendario</button>
+    <button class="tab-btn" data-tab="tab-ferie">2. Ferie Richieste</button>
+    <button class="tab-btn" data-tab="tab-indisponibilita">3. Indisponibilita</button>
+    <button class="tab-btn" data-tab="tab-riepilogo">4. Riepilogo e Classifica Punti</button>
+    <button class="tab-btn" data-tab="tab-impostazioni">5. Impostazioni e Pesi Giorni</button>
+  </nav>
+
+  <main class="main-container">
+    <!-- TAB 1: CALENDARIO -->
+    <section id="tab-calendario" class="tab-panel active">
+      <div class="calendar-layout">
+        <div class="calendar-main">
+          <div class="panel-header">
+            <h2>Griglia Calendario Mensile</h2>
+            <p class="helper-text">
+              Clicca sull'intestazione di una data per marcarla come <strong>Giorno Speciale (8 pt)</strong> o <strong>Chiuso</strong>. Clicca su uno slot turno per cambiarlo manualmente.
+            </p>
+          </div>
+          <div id="calendarWarnings" class="warnings-box" hidden></div>
+          <div id="calendarGridContainer" class="calendar-weeks"></div>
+        </div>
+
+        <aside class="calendar-sidebar">
+          <div class="card">
+            <h3>Bilanciamento Mese in Corso</h3>
+            <p class="helper-text">Confronto in tempo reale tra i turni nel calendario attivo e i target impostati.</p>
+            <div class="table-responsive">
+              <table class="data-table compact-table" id="liveSummaryTable">
+                <thead>
+                  <tr>
+                    <th>Nome</th>
+                    <th>Turni / Target</th>
+                    <th>Diff</th>
+                    <th>Punti Mese</th>
+                    <th>Media Pt</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+                <tfoot></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Legenda Colori e Pesi</h3>
+            <ul class="legend-list">
+              <li><span class="badge badge-closed">Lun</span> Chiusura (0 turni - 0 pt)</li>
+              <li><span class="badge badge-weekday">Mar / Mer / Gio</span> 3 persone - 3 pt a turno</li>
+              <li><span class="badge badge-FriSat">Ven / Sab</span> 4 persone - 4 pt a turno</li>
+              <li><span class="badge badge-sunday">Dom</span> 5 persone - 5 pt a turno</li>
+              <li><span class="badge badge-special">Speciale</span> Festivo/Evento - 8 pt a turno</li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- TAB 2: FERIE RICHIESTE -->
+    <section id="tab-ferie" class="tab-panel">
+      <div class="card">
+        <div class="panel-header">
+          <div>
+            <h2>Ferie Richieste per Data</h2>
+            <p class="helper-text">Clicca su una cella per segnare o rimuovere una <strong>X</strong> di assenza nel giorno specifico. La riga 1 calcola il totale assenze (<code>COUNTIF</code>).</p>
+          </div>
+          <button id="btnClearHolidays" class="btn btn-outline">Azzera Ferie Mese</button>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table matrix-table" id="holidaysTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: INDISPONIBILITA -->
+    <section id="tab-indisponibilita" class="tab-panel">
+      <div class="card">
+        <div class="panel-header">
+          <div>
+            <h2>Indisponibilita Settimanali Fisse</h2>
+            <p class="helper-text">Giorni fissi della settimana in cui il collaboratore non può essere inserito in turno (<strong>X</strong> = Indisponibile).</p>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table matrix-table" id="unavailabilityTable">
+            <thead></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: RIEPILOGO TURNI E CLASSIFICA PUNTI -->
+    <section id="tab-riepilogo" class="tab-panel">
+      <div class="two-col-grid">
+        <div class="card">
+          <div class="panel-header">
+            <h2>Riepilogo Turni (Storico Mensile)</h2>
+            <p class="helper-text">Storico turni effettuati per mese (include i dati di <code>ott 2026</code> del foglio originale).</p>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="historyShiftsTable">
+              <thead></thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="panel-header">
+            <h2>Classifica Punti (Storico Mensile)</h2>
+            <p class="helper-text">Storico punti fatica accumulati per mese (obiettivo: livellare i punti tra i collaboratori full-time).</p>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="historyPointsTable">
+              <thead></thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: IMPOSTAZIONI E PESI GIORNI -->
+    <section id="tab-impostazioni" class="tab-panel">
+      <div class="two-col-grid">
+        <div class="card">
+          <div class="panel-header">
+            <div>
+              <h2>Impostazioni Collaboratori</h2>
+              <p class="helper-text">Target turni su 4 settimane (tot. 88), su 5 settimane (tot. 110) e punti di partenza.</p>
+            </div>
+            <button id="btnAddStaff" class="btn btn-outline">+ Aggiungi Persona</button>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="settingsStaffTable">
+              <thead>
+                <tr>
+                  <th>Collaboratore</th>
+                  <th>Target 4 Sett.</th>
+                  <th>Target 5 Sett.</th>
+                  <th>Punti Storico (Col. D)</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+              <tfoot></tfoot>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="panel-header">
+            <h2>Pesi Giorni e Regole Algoritmo</h2>
+            <p class="helper-text">Configura i punti assegnati a ciascun giorno, il fabbisogno di personale e le regole del generatore.</p>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table" id="weightsTable">
+              <thead>
+                <tr>
+                  <th>Giorno / Tipo</th>
+                  <th>Peso Punti</th>
+                  <th>Persone Richieste (Slot)</th>
+                  <th>Punti Generati / Giorno</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div class="algo-options">
+            <h3>Opzioni Logica di Generazione</h3>
+            <label class="checkbox-row">
+              <input type="checkbox" id="optUseHistoricalPoints" />
+              <span>Bilancia i punti sommando anche lo storico pregresso (Colonna D Impostazioni) invece di partire da zero ogni mese</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="optAvoidBackToBackWeekend" checked />
+              <span>Distribuisci equamente le Domeniche (5 pt) tra i disponibili prima degli altri giorni</span>
+            </label>
+            <div class="reset-zone">
+              <button id="btnResetDefaults" class="btn btn-outline">Ripristina Dati Originali Foglio Google</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "turni-pizzeria",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generatore e gestore turni pizzeria basato su pesi ed equità",
+  "scripts": {
+    "start": "npx serve .",
+    "build": "echo 'Static build ready'"
+  }
+}
