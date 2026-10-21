@@ -198,17 +198,19 @@ function getStaffTarget(person) {
 }
 
 // Smart Shift Generator matching Gg's Excel constraints and points equity
-function generateSchedule() {
+function generateSchedule(shuffleTieBreak = false) {
   const dates = getCalendarDates();
   const newAssignments = {};
   const shiftCounts = {};
   const pointCounts = {};
   const lastWorkedDayIdx = {};
+  const tieBreaker = {};
 
   state.staff.forEach((p) => {
     shiftCounts[p.id] = 0;
     pointCounts[p.id] = state.options.useHistoricalPoints ? Number(p.basePoints) || 0 : 0;
     lastWorkedDayIdx[p.id] = -10;
+    tieBreaker[p.id] = shuffleTieBreak ? (Math.random() - 0.5) * 3 : 0;
   });
 
   // Group by week so each week is balanced progressively
@@ -273,8 +275,8 @@ function generateSchedule() {
           const ptRatioB = pointCounts[b.id] / expectedPtsB;
 
           // Score: higher is better
-          let scoreA = remRatioA * 100 - ptRatioA * 45 - availDaysCountA * 3.5;
-          let scoreB = remRatioB * 100 - ptRatioB * 45 - availDaysCountB * 3.5;
+          let scoreA = remRatioA * 100 - ptRatioA * 45 - availDaysCountA * 3.5 + tieBreaker[a.id];
+          let scoreB = remRatioB * 100 - ptRatioB * 45 - availDaysCountB * 3.5 + tieBreaker[b.id];
 
           // Small penalty for working too many consecutive days
           if (Math.abs(day.globalIdx - lastWorkedDayIdx[a.id]) === 1) scoreA -= 4;
@@ -552,8 +554,7 @@ function renderHolidaysTable() {
         } else {
           state.holidays[d.iso] = [...cur, p.id];
         }
-        saveState();
-        renderAll();
+        generateSchedule(false);
       });
       tr.appendChild(td);
     });
@@ -594,8 +595,7 @@ function renderUnavailabilityTable() {
         } else {
           state.unavailability[p.id] = [...cur, dIdx];
         }
-        saveState();
-        renderAll();
+        generateSchedule(false);
       });
       tr.appendChild(td);
     });
@@ -862,8 +862,22 @@ function initEvents() {
     renderAll();
   });
 
-  document.getElementById("btnGenerate").addEventListener("click", () => {
-    generateSchedule();
+  const btnGenerate = document.getElementById("btnGenerate");
+  btnGenerate.addEventListener("click", () => {
+    generateSchedule(true);
+    // Switch to calendar tab if user is on another tab (e.g. on mobile)
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+    const calTabBtn = document.querySelector('.tab-btn[data-tab="tab-calendario"]');
+    if (calTabBtn) calTabBtn.classList.add("active");
+    const calPanel = document.getElementById("tab-calendario");
+    if (calPanel) calPanel.classList.add("active");
+
+    const origText = "Genera Turni";
+    btnGenerate.textContent = "Turni Generati ✓";
+    setTimeout(() => {
+      btnGenerate.textContent = origText;
+    }, 1400);
   });
 
   document.getElementById("btnClearCalendar").addEventListener("click", () => {
@@ -895,8 +909,7 @@ function initEvents() {
 
   document.getElementById("btnClearHolidays").addEventListener("click", () => {
     state.holidays = {};
-    saveState();
-    renderAll();
+    generateSchedule(false);
   });
 
   document.getElementById("btnAddStaff").addEventListener("click", () => {
