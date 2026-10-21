@@ -329,7 +329,7 @@ function computeLiveStats() {
 
       if (!isStaffAvailable(staffId, d.iso, d.dayIndex)) {
         const p = state.staff.find((x) => x.id === staffId);
-        warnings.push(`${formatDisplayDate(d.iso)} (${d.shortDay}): ${p ? p.name : staffId} ha indisponibilita o ferie.`);
+        warnings.push(`${formatDisplayDate(d.iso)} (${d.shortDay}): ${p ? p.name : staffId} ha indisponibilità o ferie.`);
       }
 
       if (stats[staffId]) {
@@ -352,19 +352,25 @@ function renderCalendar() {
     const weekEl = document.createElement("div");
     weekEl.className = "week-block";
 
+    const weekTitle = document.createElement("div");
+    weekTitle.className = "week-block-title";
+    weekTitle.textContent = `Settimana ${w + 1} (${formatDisplayDate(weekDays[0].iso)} - ${formatDisplayDate(weekDays[weekDays.length - 1].iso)})`;
+    weekEl.appendChild(weekTitle);
+
     const weekGrid = document.createElement("div");
     weekGrid.className = "week-grid";
 
     weekDays.forEach((d) => {
       const meta = getDayMeta(d.iso, d.dayIndex);
       const col = document.createElement("div");
-      col.className = "day-column";
+      col.className = `day-column${meta.mode === "closed" ? " is-closed" : ""}`;
 
       const header = document.createElement("div");
-      let headerColorClass = "header-orange";
+      let headerColorClass = "header-weekday";
       if (meta.mode === "closed") headerColorClass = "header-closed";
       else if (meta.mode === "special") headerColorClass = "header-special";
-      else if (d.dayIndex === 6) headerColorClass = "header-red";
+      else if (d.dayIndex === 6) headerColorClass = "header-sunday";
+      else if (d.dayIndex === 4 || d.dayIndex === 5) headerColorClass = "header-frisat";
 
       header.className = `day-header ${headerColorClass}`;
       header.title = "Clicca per cambiare stato giorno: Normale / Speciale (8 pt) / Chiuso";

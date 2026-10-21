@@ -11,7 +11,7 @@
     <div class="topbar-brand">
       <div>
         <h1>Turni Pizzeria</h1>
-        <p class="subtitle">Pianificazione mensile basata su target turni, indisponibilita e pesi fatica</p>
+        <p class="subtitle">Pianificazione mensile su target turni, indisponibilità e pesi fatica</p>
       </div>
     </div>
 
@@ -34,14 +34,11 @@
     </div>
 
     <div class="topbar-actions">
-      <button id="btnGenerate" class="btn btn-green" title="Genera automaticamente i turni rispettando vincoli e punti">
+      <button id="btnGenerate" class="btn btn-primary" title="Genera automaticamente i turni rispettando vincoli e punti">
         Genera Turni
       </button>
-      <button id="btnSaveArchive" class="btn btn-blue" title="Registra turni e punti del mese nello storico">
+      <button id="btnSaveArchive" class="btn btn-secondary" title="Registra turni e punti del mese nello storico">
         Salva nello Storico
-      </button>
-      <button id="btnClearCalendar" class="btn btn-red" title="Svuota i turni del calendario corrente">
-        Pulisci Calendario
       </button>
       <button id="btnExportCsv" class="btn btn-outline" title="Scarica il calendario in formato CSV">
         Esporta CSV
@@ -49,13 +46,16 @@
       <button id="btnPrint" class="btn btn-outline" title="Stampa il calendario">
         Stampa
       </button>
+      <button id="btnClearCalendar" class="btn btn-danger-ghost" title="Svuota i turni del calendario corrente">
+        Pulisci Calendario
+      </button>
     </div>
   </header>
 
   <nav class="tabs-nav" aria-label="Sezioni applicazione">
     <button class="tab-btn active" data-tab="tab-calendario">1. Calendario</button>
     <button class="tab-btn" data-tab="tab-ferie">2. Ferie Richieste</button>
-    <button class="tab-btn" data-tab="tab-indisponibilita">3. Indisponibilita</button>
+    <button class="tab-btn" data-tab="tab-indisponibilita">3. Indisponibilità</button>
     <button class="tab-btn" data-tab="tab-riepilogo">4. Riepilogo e Classifica Punti</button>
     <button class="tab-btn" data-tab="tab-impostazioni">5. Impostazioni e Pesi Giorni</button>
   </nav>
@@ -134,7 +134,7 @@
       <div class="card">
         <div class="panel-header">
           <div>
-            <h2>Indisponibilita Settimanali Fisse</h2>
+            <h2>Indisponibilità Settimanali Fisse</h2>
             <p class="helper-text">Giorni fissi della settimana in cui il collaboratore non può essere inserito in turno (<strong>X</strong> = Indisponibile).</p>
           </div>
         </div>
