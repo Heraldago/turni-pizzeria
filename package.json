@@ -4,7 +4,6 @@
   "private": true,
   "description": "Generatore e gestore turni pizzeria basato su pesi ed equità",
   "scripts": {
-    "start": "npx serve .",
-    "build": "echo 'Static build ready'"
+    "start": "npx serve ."
   }
 }
