@@ -13,41 +13,42 @@
   --text-secondary: #334155;
   --text-muted: #64748b;
 
-  /* 10% Accent - Single primary focal brand color (Oven Terracotta) */
-  --accent: #c2410c;
-  --accent-hover: #9a3412;
-  --accent-soft: #fff7ed;
-  --accent-border: #fdba74;
+  /* 10% Accent - Single primary focal action color (Constructive Action Blue) */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --accent-border: #93c5fd;
 
-  /* Scala termica precisa per carico di lavoro e punti fatica */
-  /* 0 pt - Chiuso: Grigio neutro (scarico) */
+  /* Fasce di carico per giorni (nessun rosso: il rosso è riservato agli errori/conflitti) */
+  /* 0 pt - Chiuso: Grigio neutro (riposo) */
   --closed-bg: #e2e8f0;
   --closed-text: #475569;
   --closed-border: #94a3b8;
 
-  /* 3 pt - Mar/Mer/Gio: Azzurro freddo (carico ordinario, 3 persone) */
-  --weekday-bg: #e0f2fe;
-  --weekday-text: #075985;
-  --weekday-border: #0284c7;
+  /* 3 pt - Mar/Mer/Gio: Verde smeraldo chiaro (carico base, 3 persone) */
+  --weekday-bg: #dcfce7;
+  --weekday-text: #166534;
+  --weekday-border: #22c55e;
 
-  /* 4 pt - Ven/Sab: Ambra caldo (carico intenso, 4 persone) */
-  --frisat-bg: #fef3c7;
-  --frisat-text: #92400e;
-  --frisat-border: #d97706;
+  /* 4 pt - Ven/Sab: Ottanio / Ciano (carico intermedio, 4 persone) */
+  --frisat-bg: #cffafe;
+  --frisat-text: #155e75;
+  --frisat-border: #06b6d4;
 
-  /* 5 pt - Domenica: Rosso cremisi (picco settimanale, 5 persone) */
-  --sunday-bg: #fee2e2;
-  --sunday-text: #991b1b;
-  --sunday-border: #dc2626;
+  /* 5 pt - Domenica: Ambra / Oro caldo (picco settimanale, 5 persone) */
+  --sunday-bg: #fef3c7;
+  --sunday-text: #92400e;
+  --sunday-border: #f59e0b;
 
   /* 8 pt - Speciale/Festivo: Viola intenso (fuori scala / festività) */
   --special-bg: #f3e8ff;
   --special-text: #6b21a8;
   --special-border: #9333ea;
 
+  /* Semantic feedback (Rosso riservato esclusivamente a errori, conflitti e azioni distruttive) */
   --status-ok: #15803d;
   --status-warn: #b45309;
-  --status-danger: #b91c1c;
+  --status-danger: #dc2626;
   --status-danger-bg: #fef2f2;
   --status-danger-border: #fca5a5;
 
