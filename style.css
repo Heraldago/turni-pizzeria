@@ -19,25 +19,31 @@
   --accent-soft: #fff7ed;
   --accent-border: #fdba74;
 
-  /* Cohesive day weight tokens (no rainbow saturation) */
-  --closed-bg: #f1f5f9;
-  --closed-text: #64748b;
+  /* Scala termica precisa per carico di lavoro e punti fatica */
+  /* 0 pt - Chiuso: Grigio neutro (scarico) */
+  --closed-bg: #e2e8f0;
+  --closed-text: #475569;
+  --closed-border: #94a3b8;
 
-  --weekday-bg: #f8fafc;
-  --weekday-text: #1e293b;
-  --weekday-border: #94a3b8;
+  /* 3 pt - Mar/Mer/Gio: Azzurro freddo (carico ordinario, 3 persone) */
+  --weekday-bg: #e0f2fe;
+  --weekday-text: #075985;
+  --weekday-border: #0284c7;
 
-  --frisat-bg: #fff7ed;
-  --frisat-text: #9a3412;
-  --frisat-border: #fb923c;
+  /* 4 pt - Ven/Sab: Ambra caldo (carico intenso, 4 persone) */
+  --frisat-bg: #fef3c7;
+  --frisat-text: #92400e;
+  --frisat-border: #d97706;
 
-  --sunday-bg: #ffedd5;
-  --sunday-text: #7c2d12;
-  --sunday-border: #c2410c;
+  /* 5 pt - Domenica: Rosso cremisi (picco settimanale, 5 persone) */
+  --sunday-bg: #fee2e2;
+  --sunday-text: #991b1b;
+  --sunday-border: #dc2626;
 
-  --special-bg: #0f172a;
-  --special-text: #ffffff;
-  --special-border: #0f172a;
+  /* 8 pt - Speciale/Festivo: Viola intenso (fuori scala / festività) */
+  --special-bg: #f3e8ff;
+  --special-text: #6b21a8;
+  --special-border: #9333ea;
 
   --status-ok: #15803d;
   --status-warn: #b45309;
@@ -345,31 +351,31 @@ p, li, .helper-text {
 .day-header.header-weekday {
   background: var(--weekday-bg);
   color: var(--weekday-text);
-  border-top: 3px solid var(--weekday-border);
+  border-top: 4px solid var(--weekday-border);
 }
 
 .day-header.header-frisat {
   background: var(--frisat-bg);
   color: var(--frisat-text);
-  border-top: 3px solid var(--frisat-border);
+  border-top: 4px solid var(--frisat-border);
 }
 
 .day-header.header-sunday {
   background: var(--sunday-bg);
   color: var(--sunday-text);
-  border-top: 3px solid var(--sunday-border);
+  border-top: 4px solid var(--sunday-border);
 }
 
 .day-header.header-special {
   background: var(--special-bg);
   color: var(--special-text);
-  border-top: 3px solid var(--accent);
+  border-top: 4px solid var(--special-border);
 }
 
 .day-header.header-closed {
   background: var(--closed-bg);
   color: var(--closed-text);
-  border-top: 3px solid transparent;
+  border-top: 4px solid var(--closed-border);
 }
 
 .day-header-meta {
@@ -532,7 +538,7 @@ p, li, .helper-text {
 .badge-closed {
   background: var(--closed-bg);
   color: var(--closed-text);
-  border-color: var(--border);
+  border-color: var(--closed-border);
 }
 
 .badge-weekday {

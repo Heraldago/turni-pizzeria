@@ -761,8 +761,14 @@ function renderSettingsAndWeights() {
     const cfg = state.dayConfig[k];
     const tr = document.createElement("tr");
     const totalDayPts = (Number(cfg.weight) || 0) * (Number(cfg.slots) || 0);
+    let badgeClass = "badge-weekday";
+    if (k === 0 || Number(cfg.slots) === 0) badgeClass = "badge-closed";
+    else if (k === "special") badgeClass = "badge-special";
+    else if (k === 6) badgeClass = "badge-sunday";
+    else if (k === 4 || k === 5) badgeClass = "badge-FriSat";
+
     tr.innerHTML = `
-      <td>${cfg.label}</td>
+      <td><span class="badge ${badgeClass}">${cfg.label}</span></td>
       <td><input type="number" min="0" max="20" class="input-inline" value="${cfg.weight}" data-key="${k}" data-field="weight" /></td>
       <td><input type="number" min="0" max="5" class="input-inline" value="${cfg.slots}" data-key="${k}" data-field="slots" /></td>
       <td><strong>${totalDayPts} pt</strong></td>
