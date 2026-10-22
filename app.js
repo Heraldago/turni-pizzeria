@@ -560,8 +560,6 @@ function renderStaffFilterDropdown() {
 function renderLifecycleUI() {
   const phaseBadge = document.getElementById("phaseBadge");
   const btnTogglePublish = document.getElementById("btnTogglePublish");
-  const step1 = document.getElementById("step1Draft");
-  const step2 = document.getElementById("step2Published");
   const draftLockedNotice = document.getElementById("draftLockedNotice");
   const calendarGridContainer = document.getElementById("calendarGridContainer");
   const swapPanelCard = document.getElementById("swapPanelCard");
@@ -570,29 +568,24 @@ function renderLifecycleUI() {
 
   if (phaseBadge) {
     if (isPublished) {
-      phaseBadge.textContent = "Fase 2: Calendario Pubblicato";
+      phaseBadge.textContent = "Pubblicato";
       phaseBadge.className = "phase-badge phase-published";
     } else {
-      phaseBadge.textContent = "Fase 1: Bozza in Preparazione";
+      phaseBadge.textContent = "In Bozza";
       phaseBadge.className = "phase-badge phase-draft";
     }
   }
 
   if (btnTogglePublish) {
     if (isPublished) {
-      btnTogglePublish.textContent = "Torna in Bozza (Nascondi)";
+      btnTogglePublish.textContent = "Torna in Bozza";
+      btnTogglePublish.className = "btn btn-outline";
     } else {
       btnTogglePublish.textContent = "2. Pubblica ai Dipendenti";
+      btnTogglePublish.className = "btn btn-publish";
     }
   }
 
-  if (step1 && step2) {
-    step1.classList.toggle("is-active", !isPublished);
-    step1.classList.toggle("is-done", isPublished);
-    step2.classList.toggle("is-active", isPublished);
-  }
-
-  // Visibilità calendario: se è in bozza e siamo in Vista Dipendente, il calendario è bloccato
   const hideCalendarForStaff = !isAdmin && !isPublished;
   if (draftLockedNotice) {
     draftLockedNotice.hidden = !hideCalendarForStaff;
@@ -601,7 +594,6 @@ function renderLifecycleUI() {
     calendarGridContainer.hidden = hideCalendarForStaff;
   }
 
-  // Visibilità pannello scambi: attivo quando pubblicato (o sempre per il titolare)
   if (swapPanelCard) {
     const canSwap = isAdmin || (isPublished && state.options.allowEmployeeSwaps !== false);
     swapPanelCard.hidden = !canSwap;
@@ -614,47 +606,55 @@ function renderRoleUI() {
     el.hidden = !isAdmin;
   });
 
-  const staffCard = document.getElementById("staffPersonalCard");
-  if (staffCard) {
-    staffCard.hidden = isAdmin;
-  }
-
   const roleBadge = document.getElementById("roleBadge");
-  const subtitle = document.getElementById("topbarSubtitle");
   const btnToggleAdmin = document.getElementById("btnToggleAdmin");
   const calHelper = document.getElementById("calendarHelperText");
   const legendList = document.getElementById("legendList");
 
   if (isAdmin) {
-    roleBadge.textContent = "Modalità Titolare";
-    roleBadge.className = "role-badge role-admin";
-    subtitle.textContent = "Ciclo in 3 fasi: 1. Bozza Titolare -> 2. Pubblicazione & Scambi -> 3. Chiusura Mese & Lettore Punti";
-    btnToggleAdmin.textContent = "Torna a Vista Dipendente";
-    btnToggleAdmin.classList.add("is-active");
-    calHelper.innerHTML =
-      `Clicca sull'intestazione colorata di qualsiasi giorno per cambiarlo tra <strong>Normale</strong>, <strong>Festivo (${state.dayConfig.special.weight} pt)</strong> e <strong>Chiuso</strong>. Quando la bozza è pronta clicca <strong>2. Pubblica ai Dipendenti</strong>.`;
-    legendList.innerHTML = `
-      <li><span class="badge badge-closed">Chiuso (0 pt)</span> Lunedì fisso e 25 Dicembre (0 turni)</li>
-      <li><span class="badge badge-weekday">Mar-Gio (${state.dayConfig[1].weight} pt)</span> Carico Base (${state.dayConfig[1].slots} persone)</li>
-      <li><span class="badge badge-FriSat">Ven-Sab (${state.dayConfig[4].weight} pt)</span> Pre-festivo / Weekend (${state.dayConfig[4].slots} persone)</li>
-      <li><span class="badge badge-sunday">Dom (${state.dayConfig[6].weight} pt)</span> Picco Settimanale (${state.dayConfig[6].slots} persone)</li>
-      <li><span class="badge badge-special">Festivo (${state.dayConfig.special.weight} pt)</span> Vigilia, S. Stefano, Capodanno, Pasqua, Ferragosto, ecc.</li>
-    `;
+    if (roleBadge) {
+      roleBadge.textContent = "Modalità Titolare";
+      roleBadge.className = "role-badge role-admin";
+    }
+    if (btnToggleAdmin) {
+      btnToggleAdmin.textContent = "Esci da Titolare";
+      btnToggleAdmin.classList.add("is-active");
+    }
+    if (calHelper) {
+      calHelper.innerHTML =
+        `Clicca sull'intestazione di un giorno per cambiarlo tra <strong>Normale</strong>, <strong>Festivo (${state.dayConfig.special.weight} pt)</strong> e <strong>Chiuso</strong>.`;
+    }
+    if (legendList) {
+      legendList.innerHTML = `
+        <span class="badge badge-closed">Chiuso: 0 pt</span>
+        <span class="badge badge-weekday">Mar-Gio: ${state.dayConfig[1].slots}p / ${state.dayConfig[1].weight}pt</span>
+        <span class="badge badge-FriSat">Ven-Sab: ${state.dayConfig[4].slots}p / ${state.dayConfig[4].weight}pt</span>
+        <span class="badge badge-sunday">Dom: ${state.dayConfig[6].slots}p / ${state.dayConfig[6].weight}pt</span>
+        <span class="badge badge-special">Festivo: ${state.dayConfig.special.weight}pt</span>
+      `;
+    }
   } else {
-    roleBadge.textContent = "Vista Dipendente";
-    roleBadge.className = "role-badge role-staff";
-    subtitle.textContent = "Consulta il calendario pubblicato, effettua scambi turno o segnala assenze";
-    btnToggleAdmin.textContent = "Area Titolare (PIN)";
-    btnToggleAdmin.classList.remove("is-active");
-    calHelper.innerHTML =
-      `Seleziona il tuo nome per evidenziare i tuoi turni. Usa il box <strong>Scambio o Sostituzione Turno</strong> a destra per scambiare un turno in tempo reale.`;
-    legendList.innerHTML = `
-      <li><span class="badge badge-closed">Chiuso</span> Lunedì di riposo e 25 Dicembre</li>
-      <li><span class="badge badge-weekday">Mar-Gio</span> Turno feriale (${state.dayConfig[1].slots} persone)</li>
-      <li><span class="badge badge-FriSat">Ven-Sab</span> Turno weekend (${state.dayConfig[4].slots} persone)</li>
-      <li><span class="badge badge-sunday">Domenica</span> Turno domenicale (${state.dayConfig[6].slots} persone)</li>
-      <li><span class="badge badge-special">Festivo</span> Giorno festivo / speciale</li>
-    `;
+    if (roleBadge) {
+      roleBadge.textContent = "Vista Dipendente";
+      roleBadge.className = "role-badge role-staff";
+    }
+    if (btnToggleAdmin) {
+      btnToggleAdmin.textContent = "Area Titolare (PIN)";
+      btnToggleAdmin.classList.remove("is-active");
+    }
+    if (calHelper) {
+      calHelper.innerHTML =
+        `Seleziona il tuo nome in alto per evidenziare i tuoi turni o usa il riquadro a destra per cambi turno.`;
+    }
+    if (legendList) {
+      legendList.innerHTML = `
+        <span class="badge badge-closed">Chiuso (Lun / 25 Dic)</span>
+        <span class="badge badge-weekday">Mar-Gio (${state.dayConfig[1].slots} pers.)</span>
+        <span class="badge badge-FriSat">Ven-Sab (${state.dayConfig[4].slots} pers.)</span>
+        <span class="badge badge-sunday">Dom (${state.dayConfig[6].slots} pers.)</span>
+        <span class="badge badge-special">Festivo</span>
+      `;
+    }
 
     const activeTabBtn = document.querySelector(".tab-btn.active");
     if (activeTabBtn && activeTabBtn.classList.contains("admin-only")) {
@@ -1540,7 +1540,7 @@ function initEvents() {
     const calPanel = document.getElementById("tab-calendario");
     if (calPanel) calPanel.classList.add("active");
 
-    const origText = "1. Genera / Rigenera Bozza";
+    const origText = "1. Genera Bozza";
     btnGenerate.textContent = "Bozza Generata ✓";
     setTimeout(() => {
       btnGenerate.textContent = origText;
