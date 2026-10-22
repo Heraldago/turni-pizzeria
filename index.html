@@ -4,18 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Turni Pizzeria - Gestione e Generatore Equo</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=2" />
 </head>
 <body>
   <header class="topbar">
     <div class="topbar-brand">
       <div>
-        <h1>Turni Pizzeria</h1>
-        <p class="subtitle">Pianificazione mensile su target turni, indisponibilità e pesi fatica</p>
+        <div class="brand-title-row">
+          <h1>Turni Pizzeria</h1>
+          <span id="roleBadge" class="role-badge role-staff">Vista Dipendente</span>
+        </div>
+        <p class="subtitle" id="topbarSubtitle">Consulta il calendario turni e segnala le tue assenze o indisponibilità</p>
       </div>
     </div>
 
-    <div class="topbar-controls">
+    <div class="topbar-controls admin-only" id="adminTopbarControls" hidden>
       <div class="control-group">
         <label for="startDateInput">Lunedì inizio calendario</label>
         <input type="date" id="startDateInput" value="2026-11-30" />
@@ -34,31 +37,67 @@
     </div>
 
     <div class="topbar-actions">
-      <button id="btnGenerate" class="btn btn-primary" title="Genera automaticamente i turni rispettando vincoli e punti">
+      <div class="staff-filter-group">
+        <label for="staffHighlightSelect">Il tuo nome:</label>
+        <select id="staffHighlightSelect">
+          <option value="">Tutti i turni</option>
+        </select>
+      </div>
+      <button type="button" id="btnGenerate" class="btn btn-primary admin-only" hidden title="Genera automaticamente i turni rispettando vincoli e punti">
         Genera Turni
       </button>
-      <button id="btnSaveArchive" class="btn btn-secondary" title="Registra turni e punti del mese nello storico">
+      <button type="button" id="btnSaveArchive" class="btn btn-secondary admin-only" hidden title="Registra turni e punti del mese nello storico">
         Salva nello Storico
       </button>
-      <button id="btnExportCsv" class="btn btn-outline" title="Scarica il calendario in formato CSV">
+      <button type="button" id="btnExportCsv" class="btn btn-outline admin-only" hidden title="Scarica il calendario in formato CSV">
         Esporta CSV
       </button>
-      <button id="btnPrint" class="btn btn-outline" title="Stampa il calendario">
+      <button type="button" id="btnPrint" class="btn btn-outline" title="Stampa il calendario">
         Stampa
       </button>
-      <button id="btnClearCalendar" class="btn btn-danger-ghost" title="Svuota i turni del calendario corrente">
+      <button type="button" id="btnClearCalendar" class="btn btn-danger-ghost admin-only" hidden title="Svuota i turni del calendario corrente">
         Pulisci Calendario
+      </button>
+      <button type="button" id="btnToggleAdmin" class="btn btn-outline btn-admin-lock" title="Accesso riservato al titolare (PIN)">
+        Area Titolare (PIN)
       </button>
     </div>
   </header>
 
   <nav class="tabs-nav" aria-label="Sezioni applicazione">
-    <button class="tab-btn active" data-tab="tab-calendario">1. Calendario</button>
-    <button class="tab-btn" data-tab="tab-ferie">2. Ferie Richieste</button>
-    <button class="tab-btn" data-tab="tab-indisponibilita">3. Indisponibilità</button>
-    <button class="tab-btn" data-tab="tab-riepilogo">4. Riepilogo e Classifica Punti</button>
-    <button class="tab-btn" data-tab="tab-impostazioni">5. Impostazioni e Pesi Giorni</button>
+    <button type="button" class="tab-btn active" data-tab="tab-calendario">1. Calendario Turni</button>
+    <button type="button" class="tab-btn" data-tab="tab-ferie">2. Segna Assenze / Ferie</button>
+    <button type="button" class="tab-btn" data-tab="tab-indisponibilita">3. Indisponibilità Fisse</button>
+    <button type="button" class="tab-btn admin-only" data-tab="tab-riepilogo" hidden>4. Riepilogo e Classifica Punti</button>
+    <button type="button" class="tab-btn admin-only" data-tab="tab-impostazioni" hidden>5. Impostazioni e Pesi Giorni</button>
   </nav>
+
+  <!-- DIALOG ACCESSO PIN TITOLARE -->
+  <dialog id="pinModal" class="pin-dialog" closedby="any">
+    <form id="pinForm" method="dialog" class="pin-form">
+      <div class="pin-modal-header">
+        <h2>Accesso Area Titolare</h2>
+        <p class="helper-text">Inserisci il codice PIN per sbloccare la generazione turni, i punteggi e le impostazioni.</p>
+      </div>
+      <div class="pin-input-group">
+        <label for="pinCodeInput">Codice PIN</label>
+        <input
+          type="password"
+          id="pinCodeInput"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          maxlength="8"
+          placeholder="Inserisci PIN"
+           autocomplete="current-password"
+        />
+        <p id="pinErrorMsg" class="pin-error" hidden>Codice PIN non valido. Riprova.</p>
+      </div>
+      <div class="pin-modal-actions">
+        <button type="button" id="btnCancelPin" class="btn btn-outline">Annulla</button>
+        <button type="submit" id="btnSubmitPin" class="btn btn-primary">Sblocca Titolare</button>
+      </div>
+    </form>
+  </dialog>
 
   <main class="main-container">
     <!-- TAB 1: CALENDARIO -->
@@ -66,28 +105,45 @@
       <div class="calendar-layout">
         <div class="calendar-main">
           <div class="panel-header">
-            <h2>Griglia Calendario Mensile</h2>
-            <p class="helper-text">
-              Clicca sull'intestazione di una data per marcarla come <strong>Giorno Speciale (8 pt)</strong> o <strong>Chiuso</strong>. Clicca su uno slot turno per cambiarlo manualmente.
-            </p>
+            <div>
+              <h2>Griglia Calendario Mensile</h2>
+              <p class="helper-text" id="calendarHelperText">
+                Seleziona il tuo nome in alto per evidenziare i tuoi turni. Per inserire le date in cui non puoi lavorare, apri la scheda <strong>2. Segna Assenze / Ferie</strong>.
+              </p>
+            </div>
           </div>
-          <div id="calendarWarnings" class="warnings-box" hidden></div>
+          <div id="calendarWarnings" class="warnings-box admin-only" hidden></div>
           <div id="calendarGridContainer" class="calendar-weeks"></div>
         </div>
 
         <aside class="calendar-sidebar">
-          <div class="card">
-            <h3>Bilanciamento Mese in Corso</h3>
-            <p class="helper-text">Confronto in tempo reale tra i turni nel calendario attivo e i target impostati.</p>
+          <!-- Card visibile ai dipendenti -->
+          <div class="card" id="staffPersonalCard">
+            <h3>Guida Rapida Dipendente</h3>
+            <p class="helper-text">Come consultare i turni e comunicare le tue disponibilità:</p>
+            <ul class="legend-list">
+              <li><strong>Evidenzia i tuoi turni:</strong> scegli il tuo nome dal menu in alto a destra.</li>
+              <li><strong>Assenze / Ferie:</strong> vai nella scheda <em>2. Segna Assenze / Ferie</em> e clicca sulla tua casella nel giorno in cui non ci sei.</li>
+              <li><strong>Giorni fissi:</strong> nella scheda <em>3. Indisponibilità Fisse</em> trovi i giorni della settimana in cui non dai disponibilità.</li>
+            </ul>
+            <div id="staffShiftCountBox" class="staff-shift-summary" hidden></div>
+          </div>
+
+          <!-- Card visibile solo al Titolare (Admin) -->
+          <div class="card admin-only" id="adminSummaryCard" hidden>
+            <h3>Bilanciamento Mese (Metodo Max Potenziale)</h3>
+            <p class="helper-text">
+              I punti effettivi sono rapportati al <strong>Massimo Punteggio Potenziale</strong> che ciascuno può raggiungere nei propri giorni disponibili.
+            </p>
             <div class="table-responsive">
               <table class="data-table compact-table" id="liveSummaryTable">
                 <thead>
                   <tr>
                     <th>Nome</th>
-                    <th>Turni / Target</th>
+                    <th>Turni</th>
                     <th>Diff</th>
-                    <th>Punti Mese</th>
-                    <th>Media Pt</th>
+                    <th>Pt / Max Pot.</th>
+                    <th>% Equità</th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -97,15 +153,20 @@
           </div>
 
           <div class="card">
-            <h3>Scala Colori per Carico e Pesi</h3>
-            <p class="helper-text">Ogni fascia di peso ha un colore dedicato. Il rosso è riservato solo ai conflitti o assenze.</p>
-            <ul class="legend-list">
-              <li><span class="badge badge-closed">Lun (0 pt)</span> Riposo / Chiusura (0 persone)</li>
-              <li><span class="badge badge-weekday">Mar-Gio (3 pt)</span> Carico Base (3 persone)</li>
-              <li><span class="badge badge-FriSat">Ven-Sab (4 pt)</span> Carico Intermedio (4 persone)</li>
-              <li><span class="badge badge-sunday">Dom (5 pt)</span> Picco Settimanale (5 persone)</li>
-              <li><span class="badge badge-special">Speciale (8 pt)</span> Festivo / Straordinario</li>
+            <h3>Legenda Giorni e Chiusure</h3>
+            <p class="helper-text" id="legendHelperText">
+              Il <strong>Lunedì</strong> e il <strong>25 Dicembre</strong> sono impostati automaticamente come <strong>Chiuso</strong>.
+            </p>
+            <ul class="legend-list" id="legendList">
+              <li><span class="badge badge-closed">Chiuso</span> Lunedì fisso e Natale (0 turni)</li>
+              <li><span class="badge badge-weekday">Mar-Gio</span> Giorni feriali (3 persone)</li>
+              <li><span class="badge badge-FriSat">Ven-Sab</span> Pre-festivo / Weekend (4 persone)</li>
+              <li><span class="badge badge-sunday">Domenica</span> Picco settimanale (5 persone)</li>
+              <li><span class="badge badge-special">Festivo</span> Festività importanti (Vigilia, S. Stefano, Capodanno, ecc.)</li>
             </ul>
+            <div class="legend-tip admin-only" id="adminLegendTip" hidden>
+              <strong>Come cambiare un giorno (Titolare):</strong> clicca sull'intestazione colorata di qualsiasi data nel calendario per cambiarla a rotazione tra <em>Normale</em>, <em>Festivo Speciale (12 pt)</em> e <em>Chiuso (0 turni)</em>.
+            </div>
           </div>
         </aside>
       </div>
@@ -116,10 +177,10 @@
       <div class="card">
         <div class="panel-header">
           <div>
-            <h2>Ferie Richieste per Data</h2>
-            <p class="helper-text">Clicca su una cella per segnare o rimuovere una <strong>X</strong> di assenza nel giorno specifico. La riga 1 calcola il totale assenze (<code>COUNTIF</code>).</p>
+            <h2>Assenze / Ferie Richieste per Data</h2>
+            <p class="helper-text">Clicca sulla cella del tuo nome in corrispondenza della data per segnare o rimuovere una <strong>X</strong> nei giorni in cui non puoi lavorare.</p>
           </div>
-          <button id="btnClearHolidays" class="btn btn-outline">Azzera Ferie Mese</button>
+          <button type="button" id="btnClearHolidays" class="btn btn-outline admin-only" hidden>Azzera Ferie Mese</button>
         </div>
         <div class="table-responsive">
           <table class="data-table matrix-table" id="holidaysTable">
@@ -247,6 +308,6 @@
     </section>
   </main>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2"></script>
 </body>
 </html>
