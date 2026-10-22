@@ -1,8 +1,10 @@
-const STORAGE_KEY = "turni_pizzeria_state_v2";
+const STORAGE_KEY = "turni_pizzeria_state_v3";
 const ADMIN_PIN = "2323";
 
 let isAdmin = false;
 let highlightedStaffId = "";
+let staffRoleFilter = "all";
+let activeSwapMode = "sub"; // "sub" | "swap"
 
 const DAY_NAMES = [
   "Lunedì",
@@ -16,24 +18,48 @@ const DAY_NAMES = [
 
 const SHORT_DAY_NAMES = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
 
+const ITALIAN_MONTHS_SHORT = [
+  "gen",
+  "feb",
+  "mar",
+  "apr",
+  "mag",
+  "giu",
+  "lug",
+  "ago",
+  "set",
+  "ott",
+  "nov",
+  "dic"
+];
+
+const CONTRACT_LABELS = {
+  part_time: "Part-time Fattorino",
+  full_time_combo: "Full-time Interno (Mar/Mer Fattorino)",
+  weekend_only: "Part-time Weekend"
+};
+
 function getDefaultState() {
   return {
     startDate: "2026-11-30",
     weeksCount: 5,
     monthLabel: "dic 2026",
+    // "draft" = Fase 1 (Bozza Titolare, nascosto ai dipendenti) | "published" = Fase 2 (Visibile + Scambi)
+    schedulePhase: "published",
     options: {
       useHistoricalPoints: true,
-      prioritizeHighWeightDays: true
+      prioritizeHighWeightDays: true,
+      allowEmployeeSwaps: true
     },
     staff: [
-      { id: "beppe", name: "BEPPE", target4: 13, target5: 16, basePoints: 60 },
-      { id: "giof", name: "GIO F", target4: 13, target5: 16, basePoints: 64 },
-      { id: "moce", name: "MOCE", target4: 13, target5: 16, basePoints: 63 },
-      { id: "greg", name: "GREG", target4: 13, target5: 16, basePoints: 59 },
-      { id: "emanuel", name: "EMANUEL", target4: 13, target5: 16, basePoints: 57 },
-      { id: "giacomo", name: "GIACOMO", target4: 13, target5: 16, basePoints: 63 },
-      { id: "pier", name: "PIER", target4: 8, target5: 10, basePoints: 30 },
-      { id: "mattia", name: "MATTIA", target4: 4, target5: 5, basePoints: 24 }
+      { id: "beppe", name: "BEPPE", contractType: "part_time", target4: 13, target5: 16, basePoints: 60 },
+      { id: "giof", name: "GIO F", contractType: "part_time", target4: 13, target5: 16, basePoints: 64 },
+      { id: "moce", name: "MOCE", contractType: "part_time", target4: 13, target5: 16, basePoints: 63 },
+      { id: "greg", name: "GREG", contractType: "part_time", target4: 13, target5: 16, basePoints: 59 },
+      { id: "emanuel", name: "EMANUEL", contractType: "part_time", target4: 13, target5: 16, basePoints: 57 },
+      { id: "giacomo", name: "GIACOMO", contractType: "part_time", target4: 13, target5: 16, basePoints: 63 },
+      { id: "pier", name: "PIER", contractType: "full_time_combo", target4: 8, target5: 10, basePoints: 30 },
+      { id: "mattia", name: "MATTIA", contractType: "weekend_only", target4: 4, target5: 5, basePoints: 24 }
     ],
     dayConfig: {
       0: { label: "Lunedì", weight: 0, slots: 0 },
@@ -64,6 +90,8 @@ function getDefaultState() {
     dayOverrides: {},
     // assignments["YYYY-MM-DD"] = array of staffId for each slot
     assignments: {},
+    // Registro scambi/sostituzioni del mese corrente
+    swapLog: [],
     // Historical archive matching Riepilogo_Turni and Classifica_Punti
     historyMonths: ["ott 2026"],
     historyShifts: {
@@ -99,7 +127,17 @@ function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      return Object.assign(getDefaultState(), JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      const def = getDefaultState();
+      const merged = Object.assign(def, parsed);
+      merged.options = Object.assign(def.options, parsed.options || {});
+      if (!Array.isArray(merged.swapLog)) merged.swapLog = [];
+      if (!merged.schedulePhase) merged.schedulePhase = "published";
+      merged.staff = (merged.staff || def.staff).map((p) => ({
+        contractType: p.id === "pier" ? "full_time_combo" : p.id === "mattia" ? "weekend_only" : "part_time",
+        ...p
+      }));
+      return merged;
     }
   } catch (err) {
     console.error("Errore caricamento stato:", err);
@@ -160,6 +198,23 @@ function getCalendarDates() {
     });
   }
   return dates;
+}
+
+// Calcola data inizio e nome mese suggerito per il ciclo successivo
+function computeNextCycleMetadata() {
+  const start = parseIsoDate(state.startDate);
+  const nextStart = new Date(start.getTime() + state.weeksCount * 7 * 86400000);
+  const nextStartIso = formatIsoDate(nextStart);
+  // Prende un giorno centrale (es. +15 gg) per determinare il mese principale del nuovo ciclo
+  const midDate = new Date(nextStart.getTime() + 15 * 86400000);
+  const nextMonthLabel = `${ITALIAN_MONTHS_SHORT[midDate.getUTCMonth()]} ${midDate.getUTCFullYear()}`;
+  const nextEnd = new Date(nextStart.getTime() + (state.weeksCount * 7 - 1) * 86400000);
+  const nextEndIso = formatIsoDate(nextEnd);
+  return {
+    nextStartIso,
+    nextEndIso,
+    nextMonthLabel
+  };
 }
 
 // Calcolo Pasqua e Pasquetta per qualsiasi anno (algoritmo di Butcher-Meeus)
@@ -229,7 +284,6 @@ function getAutomaticDayStatus(iso) {
 }
 
 function getEffectiveDayMode(iso, dayIndex) {
-  // Lunedì (o qualsiasi giorno con 0 slot di base) parte chiuso salvo override esplicito
   const baseCfg = state.dayConfig[dayIndex] || { weight: 0, slots: 0 };
   const autoStatus = getAutomaticDayStatus(iso);
   const manualOverride = state.dayOverrides[iso];
@@ -238,7 +292,6 @@ function getEffectiveDayMode(iso, dayIndex) {
     return { mode: manualOverride, holidayName: autoStatus.holidayName };
   }
 
-  // Se è un giorno di chiusura settimanale fissa (es. Lunedì slots=0), rimane chiuso anche se cade una festività
   if (Number(baseCfg.slots) === 0) {
     return { mode: "closed", holidayName: autoStatus.holidayName };
   }
@@ -297,10 +350,7 @@ function getStaffTarget(person) {
 }
 
 /**
- * Calcola per ogni collaboratore il Punteggio Massimo Potenziale nel periodo attivo:
- * - maxAvailablePts: somma dei punti di tutti i giorni aperti in cui il collaboratore è disponibile
- *   (es. chi dà disponibilità solo Mar e Mer = 3 + 3 = 6 pt a settimana -> 24 pt su 4 sett / 30 pt su 5 sett)
- * - targetPotentialPts: punti attesi riproporzionati sul numero di turni target che deve fare nei suoi giorni disponibili
+ * Calcola per ogni collaboratore il Punteggio Massimo Potenziale nel periodo attivo
  */
 function computePotentialMap(dates) {
   const potential = {};
@@ -329,12 +379,9 @@ function computePotentialMap(dates) {
   state.staff.forEach((p) => {
     const info = potential[p.id];
     const avgWeightPerAvailDay = info.availDays > 0 ? info.maxAvailablePts / info.availDays : 3.5;
-    // Se un dipendente fa tutti i giorni in cui è disponibile (es. Pier 10 su 10), targetPotentialPts === maxAvailablePts (30 pt).
-    // Se ha più giorni disponibili dei turni target, il suo potenziale target è proporzionale al peso medio dei SUOI giorni disponibili.
     const rawTargetPts = Math.round(avgWeightPerAvailDay * Math.max(1, info.targetShifts));
     info.targetPotentialPts = Math.max(1, Math.min(info.maxAvailablePts || rawTargetPts, rawTargetPts));
 
-    // Punti storici normalizzati rispetto al potenziale individuale (così chi il mese prima ha fatto meno domeniche/festivi ha priorità)
     const histPts = Number(p.basePoints) || 0;
     info.historicalRatio = histPts / info.targetPotentialPts;
   });
@@ -342,7 +389,7 @@ function computePotentialMap(dates) {
   return potential;
 }
 
-// Generatore Turni basato sulla Media Relativa al Punteggio Massimo Potenziale di ciascuno
+// Generatore Turni (Fase 1: Bozza) basato sulla Media Relativa al Punteggio Massimo Potenziale
 function generateSchedule(shuffleTieBreak = false) {
   const dates = getCalendarDates();
   const potentialMap = computePotentialMap(dates);
@@ -369,7 +416,6 @@ function generateSchedule(shuffleTieBreak = false) {
       }))
       .filter((d) => d.meta.slots > 0);
 
-    // Calcola quante persone disponibili ha ogni giorno per dare priorità ai giorni più stretti o più pesanti
     weekDays.forEach((d) => {
       const availCount = state.staff.filter((p) => isStaffAvailable(p.id, d.iso, d.dayIndex)).length;
       d.slack = availCount - d.meta.slots;
@@ -409,22 +455,18 @@ function generateSchedule(shuffleTieBreak = false) {
           const remRatioA = (targetA - shiftCounts[a.id]) / targetA;
           const remRatioB = (targetB - shiftCounts[b.id]) / targetB;
 
-          // Rapporto punti attuali rispetto al proprio Massimo Potenziale Target (0.0 -> 1.0)
           const currentPtRatioA = pointCounts[a.id] / potA.targetPotentialPts;
           const currentPtRatioB = pointCounts[b.id] / potB.targetPotentialPts;
 
-          // Se attivo lo storico, chi aveva una % inferiore il mese precedente riceve priorità nei giorni pesanti
           const histOffsetA = state.options.useHistoricalPoints ? potA.historicalRatio * 0.35 : 0;
           const histOffsetB = state.options.useHistoricalPoints ? potB.historicalRatio * 0.35 : 0;
 
           const totalRelativeLoadA = currentPtRatioA + histOffsetA;
           const totalRelativeLoadB = currentPtRatioB + histOffsetB;
 
-          // Chi ha meno giorni disponibili in assoluto (es. Pier solo Mar/Mer) ha priorità nei suoi soli giorni disponibili
           const scarcityBonusA = (35 - potA.availDays) * 1.15;
           const scarcityBonusB = (35 - potB.availDays) * 1.15;
 
-          // Peso maggiore all'equità punti quando si assegna una Domenica (5 pt) o un Festivo (12 pt)
           const equityWeight = day.meta.weight >= 5 ? 65 : 45;
 
           let scoreA = remRatioA * 100 - totalRelativeLoadA * equityWeight + scarcityBonusA + tieBreaker[a.id];
@@ -448,6 +490,7 @@ function generateSchedule(shuffleTieBreak = false) {
   }
 
   state.assignments = newAssignments;
+  state.swapLog = [];
   saveState();
   renderAll();
 }
@@ -514,6 +557,57 @@ function renderStaffFilterDropdown() {
   });
 }
 
+function renderLifecycleUI() {
+  const phaseBadge = document.getElementById("phaseBadge");
+  const btnTogglePublish = document.getElementById("btnTogglePublish");
+  const step1 = document.getElementById("step1Draft");
+  const step2 = document.getElementById("step2Published");
+  const draftLockedNotice = document.getElementById("draftLockedNotice");
+  const calendarGridContainer = document.getElementById("calendarGridContainer");
+  const swapPanelCard = document.getElementById("swapPanelCard");
+
+  const isPublished = state.schedulePhase === "published";
+
+  if (phaseBadge) {
+    if (isPublished) {
+      phaseBadge.textContent = "Fase 2: Calendario Pubblicato";
+      phaseBadge.className = "phase-badge phase-published";
+    } else {
+      phaseBadge.textContent = "Fase 1: Bozza in Preparazione";
+      phaseBadge.className = "phase-badge phase-draft";
+    }
+  }
+
+  if (btnTogglePublish) {
+    if (isPublished) {
+      btnTogglePublish.textContent = "Torna in Bozza (Nascondi)";
+    } else {
+      btnTogglePublish.textContent = "2. Pubblica ai Dipendenti";
+    }
+  }
+
+  if (step1 && step2) {
+    step1.classList.toggle("is-active", !isPublished);
+    step1.classList.toggle("is-done", isPublished);
+    step2.classList.toggle("is-active", isPublished);
+  }
+
+  // Visibilità calendario: se è in bozza e siamo in Vista Dipendente, il calendario è bloccato
+  const hideCalendarForStaff = !isAdmin && !isPublished;
+  if (draftLockedNotice) {
+    draftLockedNotice.hidden = !hideCalendarForStaff;
+  }
+  if (calendarGridContainer) {
+    calendarGridContainer.hidden = hideCalendarForStaff;
+  }
+
+  // Visibilità pannello scambi: attivo quando pubblicato (o sempre per il titolare)
+  if (swapPanelCard) {
+    const canSwap = isAdmin || (isPublished && state.options.allowEmployeeSwaps !== false);
+    swapPanelCard.hidden = !canSwap;
+  }
+}
+
 function renderRoleUI() {
   const adminElements = document.querySelectorAll(".admin-only");
   adminElements.forEach((el) => {
@@ -534,11 +628,11 @@ function renderRoleUI() {
   if (isAdmin) {
     roleBadge.textContent = "Modalità Titolare";
     roleBadge.className = "role-badge role-admin";
-    subtitle.textContent = "Pianificazione completa: generazione turni, pesi festività e media sul massimo potenziale";
+    subtitle.textContent = "Ciclo in 3 fasi: 1. Bozza Titolare -> 2. Pubblicazione & Scambi -> 3. Chiusura Mese & Lettore Punti";
     btnToggleAdmin.textContent = "Torna a Vista Dipendente";
     btnToggleAdmin.classList.add("is-active");
     calHelper.innerHTML =
-      `Clicca sull'intestazione colorata di qualsiasi giorno per cambiarlo tra <strong>Normale</strong>, <strong>Festivo (${state.dayConfig.special.weight} pt)</strong> e <strong>Chiuso</strong>. Il Lunedì e il 25 Dicembre sono chiusi in automatico.`;
+      `Clicca sull'intestazione colorata di qualsiasi giorno per cambiarlo tra <strong>Normale</strong>, <strong>Festivo (${state.dayConfig.special.weight} pt)</strong> e <strong>Chiuso</strong>. Quando la bozza è pronta clicca <strong>2. Pubblica ai Dipendenti</strong>.`;
     legendList.innerHTML = `
       <li><span class="badge badge-closed">Chiuso (0 pt)</span> Lunedì fisso e 25 Dicembre (0 turni)</li>
       <li><span class="badge badge-weekday">Mar-Gio (${state.dayConfig[1].weight} pt)</span> Carico Base (${state.dayConfig[1].slots} persone)</li>
@@ -549,11 +643,11 @@ function renderRoleUI() {
   } else {
     roleBadge.textContent = "Vista Dipendente";
     roleBadge.className = "role-badge role-staff";
-    subtitle.textContent = "Consulta il calendario turni e segnala le tue assenze o indisponibilità";
+    subtitle.textContent = "Consulta il calendario pubblicato, effettua scambi turno o segnala assenze";
     btnToggleAdmin.textContent = "Area Titolare (PIN)";
     btnToggleAdmin.classList.remove("is-active");
     calHelper.innerHTML =
-      `Seleziona il tuo nome in alto per evidenziare i tuoi turni. Per segnare i giorni in cui non ci sei, usa le schede <strong>2. Segna Assenze / Ferie</strong> e <strong>3. Indisponibilità Fisse</strong>.`;
+      `Seleziona il tuo nome per evidenziare i tuoi turni. Usa il box <strong>Scambio o Sostituzione Turno</strong> a destra per scambiare un turno in tempo reale.`;
     legendList.innerHTML = `
       <li><span class="badge badge-closed">Chiuso</span> Lunedì di riposo e 25 Dicembre</li>
       <li><span class="badge badge-weekday">Mar-Gio</span> Turno feriale (${state.dayConfig[1].slots} persone)</li>
@@ -562,7 +656,6 @@ function renderRoleUI() {
       <li><span class="badge badge-special">Festivo</span> Giorno festivo / speciale</li>
     `;
 
-    // Se ci si trovava su una tab riservata al titolare, torna al calendario
     const activeTabBtn = document.querySelector(".tab-btn.active");
     if (activeTabBtn && activeTabBtn.classList.contains("admin-only")) {
       document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
@@ -573,6 +666,8 @@ function renderRoleUI() {
       if (calPanel) calPanel.classList.add("active");
     }
   }
+
+  renderLifecycleUI();
 }
 
 function renderCalendar() {
@@ -607,7 +702,6 @@ function renderCalendar() {
 
       header.className = `day-header ${headerColorClass}${isAdmin ? "" : " is-readonly"}`;
 
-      // Nella vista dipendente i punti rimangono nascosti
       let metaText = "";
       if (meta.mode === "closed") {
         metaText = meta.holidayName ? `Chiuso (${meta.holidayName})` : "Chiuso";
@@ -686,7 +780,6 @@ function renderCalendar() {
 
             cell.appendChild(select);
           } else {
-            // Vista Dipendente: sola lettura pulita
             const person = state.staff.find((p) => p.id === currentVal);
             const span = document.createElement("div");
             span.className = `slot-readonly${isHighlighted ? " slot-highlighted" : ""}`;
@@ -708,6 +801,136 @@ function renderCalendar() {
   }
 }
 
+// Popola i selettori del pannello Scambi & Sostituzioni in Tempo Reale (Fase 2)
+function renderSwapPanel() {
+  const subDateSelect = document.getElementById("subDateSelect");
+  const swapDate1Select = document.getElementById("swapDate1Select");
+  const swapDate2Select = document.getElementById("swapDate2Select");
+  if (!subDateSelect || !swapDate1Select || !swapDate2Select) return;
+
+  const openDates = getCalendarDates().filter((d) => getDayMeta(d.iso, d.dayIndex).slots > 0);
+  const prevSubDate = subDateSelect.value;
+  const prevSwap1 = swapDate1Select.value;
+  const prevSwap2 = swapDate2Select.value;
+
+  const buildDateOptions = (selectEl, prevIso, fallbackIdx) => {
+    selectEl.innerHTML = "";
+    openDates.forEach((d, idx) => {
+      const meta = getDayMeta(d.iso, d.dayIndex);
+      const opt = document.createElement("option");
+      opt.value = d.iso;
+      opt.textContent = `${d.shortDay} ${formatDisplayDate(d.iso)}${meta.mode === "special" ? " (" + meta.label + ")" : ""}`;
+      if (prevIso ? d.iso === prevIso : idx === fallbackIdx) {
+        opt.selected = true;
+      }
+      selectEl.appendChild(opt);
+    });
+  };
+
+  buildDateOptions(subDateSelect, prevSubDate, 0);
+  buildDateOptions(swapDate1Select, prevSwap1, 0);
+  buildDateOptions(swapDate2Select, prevSwap2, Math.min(1, openDates.length - 1));
+
+  updateSubStaffSelectors();
+  updateDoubleSwapStaffSelectors();
+  renderSwapLog();
+}
+
+function updateSubStaffSelectors() {
+  const subDateSelect = document.getElementById("subDateSelect");
+  const outSelect = document.getElementById("subOutStaffSelect");
+  const inSelect = document.getElementById("subInStaffSelect");
+  if (!subDateSelect || !outSelect || !inSelect) return;
+
+  const iso = subDateSelect.value;
+  if (!iso) return;
+  const dayIndex = getMondayWeekdayIndex(iso);
+  const meta = getDayMeta(iso, dayIndex);
+  const assignedIds = (state.assignments[iso] || []).slice(0, meta.slots).filter(Boolean);
+
+  outSelect.innerHTML = "";
+  if (assignedIds.length === 0) {
+    outSelect.innerHTML = `<option value="">Nessun turno assegnato</option>`;
+  } else {
+    assignedIds.forEach((id) => {
+      const p = state.staff.find((x) => x.id === id);
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = p ? p.name : id;
+      outSelect.appendChild(opt);
+    });
+  }
+
+  inSelect.innerHTML = "";
+  const candidates = state.staff.filter((p) => !assignedIds.includes(p.id));
+  candidates.forEach((p) => {
+    const avail = isStaffAvailable(p.id, iso, dayIndex);
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = avail ? p.name : `${p.name} (Indisponibile)`;
+    inSelect.appendChild(opt);
+  });
+}
+
+function updateDoubleSwapStaffSelectors() {
+  const d1Select = document.getElementById("swapDate1Select");
+  const s1Select = document.getElementById("swapStaff1Select");
+  const d2Select = document.getElementById("swapDate2Select");
+  const s2Select = document.getElementById("swapStaff2Select");
+  if (!d1Select || !s1Select || !d2Select || !s2Select) return;
+
+  const populateAssigned = (dateIso, staffSelect) => {
+    const prev = staffSelect.value;
+    staffSelect.innerHTML = "";
+    if (!dateIso) return;
+    const dayIdx = getMondayWeekdayIndex(dateIso);
+    const meta = getDayMeta(dateIso, dayIdx);
+    const assigned = (state.assignments[dateIso] || []).slice(0, meta.slots).filter(Boolean);
+    assigned.forEach((id) => {
+      const p = state.staff.find((x) => x.id === id);
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = p ? p.name : id;
+      if (id === prev) opt.selected = true;
+      staffSelect.appendChild(opt);
+    });
+  };
+
+  populateAssigned(d1Select.value, s1Select);
+  populateAssigned(d2Select.value, s2Select);
+}
+
+function showSwapFeedback(msg, isError = false) {
+  const box = document.getElementById("swapFeedbackMsg");
+  if (!box) return;
+  box.hidden = false;
+  box.className = `swap-feedback ${isError ? "is-err" : "is-ok"}`;
+  box.textContent = msg;
+  setTimeout(() => {
+    box.hidden = true;
+  }, 4000);
+}
+
+function renderSwapLog() {
+  const listEl = document.getElementById("swapHistoryList");
+  const undoBtn = document.getElementById("btnUndoLastSwap");
+  if (!listEl || !undoBtn) return;
+
+  const logs = state.swapLog || [];
+  undoBtn.hidden = logs.length === 0;
+
+  if (logs.length === 0) {
+    listEl.innerHTML = `<li>Nessuno scambio effettuato in questo mese.</li>`;
+    return;
+  }
+
+  listEl.innerHTML = logs
+    .slice()
+    .reverse()
+    .map((item) => `<li>${item.text}</li>`)
+    .join("");
+}
+
 function renderLiveSummary() {
   const { stats, warnings } = computeLiveStats();
   const tbody = document.querySelector("#liveSummaryTable tbody");
@@ -715,13 +938,12 @@ function renderLiveSummary() {
   const warnBox = document.getElementById("calendarWarnings");
   const staffShiftCountBox = document.getElementById("staffShiftCountBox");
 
-  // Riepilogo personale nella Vista Dipendente (senza punti)
   if (staffShiftCountBox) {
-    if (highlightedStaffId && stats[highlightedStaffId]) {
+    if (highlightedStaffId && stats[highlightedStaffId] && state.schedulePhase === "published") {
       const p = state.staff.find((x) => x.id === highlightedStaffId);
       const st = stats[highlightedStaffId];
       staffShiftCountBox.hidden = false;
-      staffShiftCountBox.innerHTML = `Turni in calendario per <strong>${p ? p.name : ""}</strong>: <strong>${st.shifts} turni</strong>`;
+      staffShiftCountBox.innerHTML = `Turni attuali in calendario per <strong>${p ? p.name : ""}</strong>: <strong>${st.shifts} turni</strong>`;
     } else {
       staffShiftCountBox.hidden = true;
       staffShiftCountBox.innerHTML = "";
@@ -765,7 +987,7 @@ function renderLiveSummary() {
       : 0;
 
     const tr = document.createElement("tr");
-    tr.title = `Max punti di tutti i giorni disponibili nel mese: ${st.maxAvailablePts} pt | Quota attesa sui ${st.target} turni: ${st.targetPotentialPts} pt`;
+    tr.title = `Max punti disponibili: ${st.maxAvailablePts} pt | Quota attesa sui ${st.target} turni: ${st.targetPotentialPts} pt`;
     tr.innerHTML = `
       <td>${p.name}</td>
       <td><strong>${st.shifts}</strong> / ${st.target}</td>
@@ -848,11 +1070,12 @@ function renderHolidaysTable() {
 function renderUnavailabilityTable() {
   const thead = document.querySelector("#unavailabilityTable thead");
   const tbody = document.querySelector("#unavailabilityTable tbody");
-  const activeDays = [1, 2, 3, 4, 5, 6]; // Martedi .. Domenica (Lunedì sempre chiuso)
+  const activeDays = [1, 2, 3, 4, 5, 6];
 
   thead.innerHTML = `
     <tr>
       <th>Collaboratore</th>
+      <th>Inquadramento / Ruolo</th>
       ${activeDays.map((dIdx) => `<th>${DAY_NAMES[dIdx]}</th>`).join("")}
     </tr>
   `;
@@ -863,6 +1086,12 @@ function renderUnavailabilityTable() {
     const nameTd = document.createElement("td");
     nameTd.textContent = p.name;
     tr.appendChild(nameTd);
+
+    const roleTd = document.createElement("td");
+    roleTd.style.fontSize = "0.76rem";
+    roleTd.style.color = "var(--text-muted)";
+    roleTd.textContent = CONTRACT_LABELS[p.contractType] || CONTRACT_LABELS.part_time;
+    tr.appendChild(roleTd);
 
     const unavail = state.unavailability[p.id] || [];
     activeDays.forEach((dIdx) => {
@@ -899,7 +1128,7 @@ function renderHistoryTables() {
     <tr>
       <th>Nome</th>
       ${months.map((m) => `<th>${m}</th>`).join("")}
-      <th>In corso (${state.monthLabel})</th>
+      <th>Lettore Punti Live (${state.monthLabel})</th>
     </tr>
   `;
 
@@ -943,7 +1172,7 @@ function renderHistoryTables() {
     <tr>
       <th>Nome</th>
       ${months.map((m) => `<th>${m}</th>`).join("")}
-      <th>In corso (${state.monthLabel})</th>
+      <th>Lettore Punti Live (${state.monthLabel})</th>
       <th>% sul Max Potenziale</th>
     </tr>
   `;
@@ -987,6 +1216,11 @@ function renderHistoryTables() {
 function renderSettingsAndWeights() {
   const staffBody = document.querySelector("#settingsStaffTable tbody");
   const staffFoot = document.querySelector("#settingsStaffTable tfoot");
+  const roleFilterSelect = document.getElementById("staffRoleFilterSelect");
+  if (roleFilterSelect) {
+    roleFilterSelect.value = staffRoleFilter;
+  }
+
   staffBody.innerHTML = "";
 
   let sum4 = 0;
@@ -994,6 +1228,11 @@ function renderSettingsAndWeights() {
   let sumPts = 0;
 
   state.staff.forEach((p, idx) => {
+    const cType = p.contractType || "part_time";
+    if (staffRoleFilter !== "all" && cType !== staffRoleFilter) {
+      return;
+    }
+
     sum4 += Number(p.target4) || 0;
     sum5 += Number(p.target5) || 0;
     sumPts += Number(p.basePoints) || 0;
@@ -1001,6 +1240,13 @@ function renderSettingsAndWeights() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><input type="text" class="input-inline input-name" value="${p.name}" data-idx="${idx}" data-field="name" /></td>
+      <td>
+        <select class="role-select-inline" data-idx="${idx}" data-field="contractType">
+          <option value="part_time" ${cType === "part_time" ? "selected" : ""}>Part-time Fattorino</option>
+          <option value="full_time_combo" ${cType === "full_time_combo" ? "selected" : ""}>Full-time Interno (Mar/Mer Fattorino)</option>
+          <option value="weekend_only" ${cType === "weekend_only" ? "selected" : ""}>Part-time Weekend</option>
+        </select>
+      </td>
       <td><input type="number" min="0" max="35" class="input-inline" value="${p.target4}" data-idx="${idx}" data-field="target4" /></td>
       <td><input type="number" min="0" max="35" class="input-inline" value="${p.target5}" data-idx="${idx}" data-field="target5" /></td>
       <td><input type="number" min="0" class="input-inline" value="${p.basePoints}" data-idx="${idx}" data-field="basePoints" /></td>
@@ -1011,7 +1257,8 @@ function renderSettingsAndWeights() {
 
   staffFoot.innerHTML = `
     <tr>
-      <td>TOTALE</td>
+      <td>TOTALE FILTRATO</td>
+      <td>-</td>
       <td>${sum4}</td>
       <td>${sum5}</td>
       <td>${sumPts}</td>
@@ -1019,11 +1266,21 @@ function renderSettingsAndWeights() {
     </tr>
   `;
 
-  staffBody.querySelectorAll("input").forEach((inp) => {
+  staffBody.querySelectorAll("input, select").forEach((inp) => {
     inp.addEventListener("change", (e) => {
       const idx = Number(e.target.dataset.idx);
       const field = e.target.dataset.field;
-      state.staff[idx][field] = field === "name" ? e.target.value.trim() : Number(e.target.value);
+      if (field === "name") {
+        state.staff[idx].name = e.target.value.trim();
+      } else if (field === "contractType") {
+        state.staff[idx].contractType = e.target.value;
+        // Se si imposta Full-time Interno (Mar/Mer Fattorino), pre-imposta Gio-Dom come non disponibili se vuoti
+        if (e.target.value === "full_time_combo") {
+          state.unavailability[state.staff[idx].id] = [3, 4, 5, 6];
+        }
+      } else {
+        state.staff[idx][field] = Number(e.target.value);
+      }
       saveState();
       renderAll();
     });
@@ -1075,6 +1332,78 @@ function renderSettingsAndWeights() {
 
   document.getElementById("optUseHistoricalPoints").checked = !!state.options.useHistoricalPoints;
   document.getElementById("optAvoidBackToBackWeekend").checked = !!state.options.prioritizeHighWeightDays;
+  const optSwaps = document.getElementById("optAllowEmployeeSwaps");
+  if (optSwaps) {
+    optSwaps.checked = state.options.allowEmployeeSwaps !== false;
+  }
+}
+
+// Dialog Fase 3: Chiusura Mese, Lettore Punti & Avanzamento Ciclo
+function openCloseMonthModal() {
+  const modal = document.getElementById("closeMonthModal");
+  const tbody = document.querySelector("#closeMonthReaderTable tbody");
+  const subtitle = document.getElementById("closeMonthSubtitle");
+  const nextDatesPreview = document.getElementById("nextCycleDatesPreview");
+  const nextLabelInput = document.getElementById("nextCycleLabelInput");
+
+  const { stats } = computeLiveStats();
+  const { nextStartIso, nextEndIso, nextMonthLabel } = computeNextCycleMetadata();
+
+  subtitle.innerHTML = `Il <strong>Lettore Punti</strong> ha calcolato i turni definitivi di <strong>${state.monthLabel}</strong> (inclusi <strong>${(state.swapLog || []).length}</strong> scambi/sostituzioni effettuati). Confermando, i punti vengono congelati nello storico per dare priorità equa nel mese successivo.`;
+
+  tbody.innerHTML = "";
+  state.staff.forEach((p) => {
+    const st = stats[p.id] || { shifts: 0, points: 0, target: 0, targetPotentialPts: 1 };
+    const pct = st.targetPotentialPts > 0 ? Math.round((st.points / st.targetPotentialPts) * 100) : 0;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><strong>${p.name}</strong></td>
+      <td>${st.shifts} / ${st.target}</td>
+      <td>${p.basePoints} pt</td>
+      <td><strong>${st.points} pt</strong> <small>(su ${st.targetPotentialPts})</small></td>
+      <td><strong>${pct}%</strong></td>
+      <td><strong>${st.points} pt</strong></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  nextDatesPreview.textContent = `${formatFullDisplayDate(nextStartIso)} -> ${formatFullDisplayDate(nextEndIso)} (${state.weeksCount} sett.)`;
+  nextLabelInput.value = nextMonthLabel;
+
+  modal.showModal();
+}
+
+function confirmCloseMonthAndAdvance() {
+  const nextLabelInput = document.getElementById("nextCycleLabelInput");
+  const { stats } = computeLiveStats();
+  const { nextStartIso, nextMonthLabel } = computeNextCycleMetadata();
+  const currentLabel = state.monthLabel.trim() || "mese";
+
+  if (!state.historyMonths.includes(currentLabel)) {
+    state.historyMonths.push(currentLabel);
+  }
+  state.historyShifts[currentLabel] = {};
+  state.historyPoints[currentLabel] = {};
+
+  state.staff.forEach((p) => {
+    const st = stats[p.id] || { shifts: 0, points: 0 };
+    state.historyShifts[currentLabel][p.id] = st.shifts;
+    state.historyPoints[currentLabel][p.id] = st.points;
+    p.basePoints = st.points;
+  });
+
+  // Avanza automaticamente al ciclo successivo in Fase 1 (Bozza Titolare)
+  state.startDate = nextStartIso;
+  state.monthLabel = (nextLabelInput && nextLabelInput.value.trim()) || nextMonthLabel;
+  state.holidays = {};
+  state.dayOverrides = {};
+  state.swapLog = [];
+  state.schedulePhase = "draft";
+
+  const modal = document.getElementById("closeMonthModal");
+  if (modal) modal.close();
+
+  generateSchedule(false);
 }
 
 function exportCsv() {
@@ -1113,6 +1442,7 @@ function renderAll() {
   renderRoleUI();
   renderStaffFilterDropdown();
   renderCalendar();
+  renderSwapPanel();
   renderLiveSummary();
   renderHolidaysTable();
   renderUnavailabilityTable();
@@ -1198,8 +1528,10 @@ function initEvents() {
     renderAll();
   });
 
+  // Fase 1: Genera / Rigenera Bozza
   const btnGenerate = document.getElementById("btnGenerate");
   btnGenerate.addEventListener("click", () => {
+    state.schedulePhase = "draft";
     generateSchedule(true);
     document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
@@ -1208,36 +1540,181 @@ function initEvents() {
     const calPanel = document.getElementById("tab-calendario");
     if (calPanel) calPanel.classList.add("active");
 
-    const origText = "Genera Turni";
-    btnGenerate.textContent = "Turni Generati ✓";
+    const origText = "1. Genera / Rigenera Bozza";
+    btnGenerate.textContent = "Bozza Generata ✓";
     setTimeout(() => {
       btnGenerate.textContent = origText;
     }, 1400);
   });
 
+  // Fase 2: Pubblica ai Dipendenti / Torna in Bozza
+  const btnTogglePublish = document.getElementById("btnTogglePublish");
+  if (btnTogglePublish) {
+    btnTogglePublish.addEventListener("click", () => {
+      state.schedulePhase = state.schedulePhase === "published" ? "draft" : "published";
+      saveState();
+      renderAll();
+    });
+  }
+
+  // Fase 3: Chiudi Mese & Lettore Punti
+  const btnCloseMonthModal = document.getElementById("btnCloseMonthModal");
+  const btnCancelCloseMonth = document.getElementById("btnCancelCloseMonth");
+  const btnConfirmCloseMonth = document.getElementById("btnConfirmCloseMonth");
+
+  if (btnCloseMonthModal) {
+    btnCloseMonthModal.addEventListener("click", openCloseMonthModal);
+  }
+  if (btnCancelCloseMonth) {
+    btnCancelCloseMonth.addEventListener("click", () => {
+      document.getElementById("closeMonthModal").close();
+    });
+  }
+  if (btnConfirmCloseMonth) {
+    btnConfirmCloseMonth.addEventListener("click", confirmCloseMonthAndAdvance);
+  }
+
+  // Eventi Pannello Scambi & Sostituzioni in Tempo Reale
+  document.querySelectorAll(".swap-mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeSwapMode = btn.dataset.swapMode;
+      document.querySelectorAll(".swap-mode-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById("swapSubBox").hidden = activeSwapMode !== "sub";
+      document.getElementById("swapDoubleBox").hidden = activeSwapMode !== "swap";
+    });
+  });
+
+  const subDateSelect = document.getElementById("subDateSelect");
+  if (subDateSelect) {
+    subDateSelect.addEventListener("change", updateSubStaffSelectors);
+  }
+
+  const swapDate1Select = document.getElementById("swapDate1Select");
+  const swapDate2Select = document.getElementById("swapDate2Select");
+  if (swapDate1Select) {
+    swapDate1Select.addEventListener("change", updateDoubleSwapStaffSelectors);
+  }
+  if (swapDate2Select) {
+    swapDate2Select.addEventListener("change", updateDoubleSwapStaffSelectors);
+  }
+
+  const btnApplySub = document.getElementById("btnApplySubstitution");
+  if (btnApplySub) {
+    btnApplySub.addEventListener("click", () => {
+      const iso = document.getElementById("subDateSelect").value;
+      const outId = document.getElementById("subOutStaffSelect").value;
+      const inId = document.getElementById("subInStaffSelect").value;
+      if (!iso || !outId || !inId) {
+        showSwapFeedback("Seleziona data, chi esce e chi subentra.", true);
+        return;
+      }
+      const assigned = state.assignments[iso] || [];
+      const slotIdx = assigned.indexOf(outId);
+      if (slotIdx === -1) {
+        showSwapFeedback("Collaboratore non trovato in questa data.", true);
+        return;
+      }
+      if (assigned.includes(inId)) {
+        showSwapFeedback("Il sostituto è già in turno in questa data.", true);
+        return;
+      }
+
+      const prevSnapshot = JSON.parse(JSON.stringify(state.assignments));
+      state.assignments[iso][slotIdx] = inId;
+
+      const outName = (state.staff.find((p) => p.id === outId) || {}).name || outId;
+      const inName = (state.staff.find((p) => p.id === inId) || {}).name || inId;
+      state.swapLog.push({
+        text: `${formatDisplayDate(iso)}: <strong>${inName}</strong> sostituisce <strong>${outName}</strong>`,
+        prevAssignments: prevSnapshot
+      });
+
+      saveState();
+      renderAll();
+      showSwapFeedback(`Sostituzione registrata: ${inName} al posto di ${outName} (${formatDisplayDate(iso)})`);
+    });
+  }
+
+  const btnApplyDoubleSwap = document.getElementById("btnApplyDoubleSwap");
+  if (btnApplyDoubleSwap) {
+    btnApplyDoubleSwap.addEventListener("click", () => {
+      const iso1 = document.getElementById("swapDate1Select").value;
+      const staff1 = document.getElementById("swapStaff1Select").value;
+      const iso2 = document.getElementById("swapDate2Select").value;
+      const staff2 = document.getElementById("swapStaff2Select").value;
+
+      if (!iso1 || !staff1 || !iso2 || !staff2) {
+        showSwapFeedback("Seleziona entrambi i giorni e i collaboratori.", true);
+        return;
+      }
+      if (iso1 === iso2) {
+        showSwapFeedback("Per lo scambio tra 2 giorni scegli due date diverse.", true);
+        return;
+      }
+      if (staff1 === staff2) {
+        showSwapFeedback("Seleziona due collaboratori diversi da scambiare.", true);
+        return;
+      }
+
+      const list1 = state.assignments[iso1] || [];
+      const list2 = state.assignments[iso2] || [];
+      const idx1 = list1.indexOf(staff1);
+      const idx2 = list2.indexOf(staff2);
+
+      if (idx1 === -1 || idx2 === -1) {
+        showSwapFeedback("Turni selezionati non validi.", true);
+        return;
+      }
+      if (list1.includes(staff2)) {
+        showSwapFeedback(`Il collaboratore è già in turno il ${formatDisplayDate(iso1)}.`, true);
+        return;
+      }
+      if (list2.includes(staff1)) {
+        showSwapFeedback(`Il collaboratore è già in turno il ${formatDisplayDate(iso2)}.`, true);
+        return;
+      }
+
+      const prevSnapshot = JSON.parse(JSON.stringify(state.assignments));
+      state.assignments[iso1][idx1] = staff2;
+      state.assignments[iso2][idx2] = staff1;
+
+      const name1 = (state.staff.find((p) => p.id === staff1) || {}).name || staff1;
+      const name2 = (state.staff.find((p) => p.id === staff2) || {}).name || staff2;
+
+      state.swapLog.push({
+        text: `Scambio: <strong>${name1}</strong> (${formatDisplayDate(iso1)}) ↔ <strong>${name2}</strong> (${formatDisplayDate(iso2)})`,
+        prevAssignments: prevSnapshot
+      });
+
+      saveState();
+      renderAll();
+      showSwapFeedback(`Scambio completato tra ${name1} e ${name2}!`);
+    });
+  }
+
+  const btnUndoLastSwap = document.getElementById("btnUndoLastSwap");
+  if (btnUndoLastSwap) {
+    btnUndoLastSwap.addEventListener("click", () => {
+      if (!state.swapLog || state.swapLog.length === 0) return;
+      const last = state.swapLog.pop();
+      if (last && last.prevAssignments) {
+        state.assignments = last.prevAssignments;
+      }
+      saveState();
+      renderAll();
+      showSwapFeedback("Ultimo scambio annullato.");
+    });
+  }
+
   document.getElementById("btnClearCalendar").addEventListener("click", () => {
     state.assignments = {};
+    state.swapLog = [];
     saveState();
     renderAll();
   });
 
-  document.getElementById("btnSaveArchive").addEventListener("click", () => {
-    const label = state.monthLabel.trim() || "mese";
-    const { stats } = computeLiveStats();
-    if (!state.historyMonths.includes(label)) {
-      state.historyMonths.push(label);
-    }
-    state.historyShifts[label] = {};
-    state.historyPoints[label] = {};
-    state.staff.forEach((p) => {
-      const st = stats[p.id] || { shifts: 0, points: 0 };
-      state.historyShifts[label][p.id] = st.shifts;
-      state.historyPoints[label][p.id] = st.points;
-      p.basePoints = st.points;
-    });
-    saveState();
-    renderAll();
-  });
+  document.getElementById("btnSaveArchive").addEventListener("click", openCloseMonthModal);
 
   document.getElementById("btnExportCsv").addEventListener("click", exportCsv);
   document.getElementById("btnPrint").addEventListener("click", () => window.print());
@@ -1247,11 +1724,21 @@ function initEvents() {
     generateSchedule(false);
   });
 
+  // Filtro Ruolo in Tab 5
+  const staffRoleFilterSelect = document.getElementById("staffRoleFilterSelect");
+  if (staffRoleFilterSelect) {
+    staffRoleFilterSelect.addEventListener("change", (e) => {
+      staffRoleFilter = e.target.value;
+      renderSettingsAndWeights();
+    });
+  }
+
   document.getElementById("btnAddStaff").addEventListener("click", () => {
     const id = "staff_" + Date.now();
     state.staff.push({
       id,
       name: "NUOVO",
+      contractType: "part_time",
       target4: 13,
       target5: 16,
       basePoints: 0
@@ -1270,6 +1757,15 @@ function initEvents() {
     state.options.prioritizeHighWeightDays = e.target.checked;
     saveState();
   });
+
+  const optAllowEmployeeSwaps = document.getElementById("optAllowEmployeeSwaps");
+  if (optAllowEmployeeSwaps) {
+    optAllowEmployeeSwaps.addEventListener("change", (e) => {
+      state.options.allowEmployeeSwaps = e.target.checked;
+      saveState();
+      renderLifecycleUI();
+    });
+  }
 
   document.getElementById("btnResetDefaults").addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);

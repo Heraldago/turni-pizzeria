@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Turni Pizzeria - Gestione e Generatore Equo</title>
-  <link rel="stylesheet" href="style.css?v=2" />
+  <link rel="stylesheet" href="style.css?v=3" />
 </head>
 <body>
   <header class="topbar">
@@ -13,6 +13,7 @@
         <div class="brand-title-row">
           <h1>Turni Pizzeria</h1>
           <span id="roleBadge" class="role-badge role-staff">Vista Dipendente</span>
+          <span id="phaseBadge" class="phase-badge phase-draft">Fase 1: Bozza</span>
         </div>
         <p class="subtitle" id="topbarSubtitle">Consulta il calendario turni e segnala le tue assenze o indisponibilità</p>
       </div>
@@ -43,12 +44,6 @@
           <option value="">Tutti i turni</option>
         </select>
       </div>
-      <button type="button" id="btnGenerate" class="btn btn-primary admin-only" hidden title="Genera automaticamente i turni rispettando vincoli e punti">
-        Genera Turni
-      </button>
-      <button type="button" id="btnSaveArchive" class="btn btn-secondary admin-only" hidden title="Registra turni e punti del mese nello storico">
-        Salva nello Storico
-      </button>
       <button type="button" id="btnExportCsv" class="btn btn-outline admin-only" hidden title="Scarica il calendario in formato CSV">
         Esporta CSV
       </button>
@@ -56,7 +51,7 @@
         Stampa
       </button>
       <button type="button" id="btnClearCalendar" class="btn btn-danger-ghost admin-only" hidden title="Svuota i turni del calendario corrente">
-        Pulisci Calendario
+        Pulisci
       </button>
       <button type="button" id="btnToggleAdmin" class="btn btn-outline btn-admin-lock" title="Accesso riservato al titolare (PIN)">
         Area Titolare (PIN)
@@ -68,8 +63,8 @@
     <button type="button" class="tab-btn active" data-tab="tab-calendario">1. Calendario Turni</button>
     <button type="button" class="tab-btn" data-tab="tab-ferie">2. Segna Assenze / Ferie</button>
     <button type="button" class="tab-btn" data-tab="tab-indisponibilita">3. Indisponibilità Fisse</button>
-    <button type="button" class="tab-btn admin-only" data-tab="tab-riepilogo" hidden>4. Riepilogo e Classifica Punti</button>
-    <button type="button" class="tab-btn admin-only" data-tab="tab-impostazioni" hidden>5. Impostazioni e Pesi Giorni</button>
+    <button type="button" class="tab-btn admin-only" data-tab="tab-riepilogo" hidden>4. Riepilogo e Lettore Punti</button>
+    <button type="button" class="tab-btn admin-only" data-tab="tab-impostazioni" hidden>5. Impostazioni e Filtri</button>
   </nav>
 
   <!-- DIALOG ACCESSO PIN TITOLARE -->
@@ -77,7 +72,7 @@
     <form id="pinForm" method="dialog" class="pin-form">
       <div class="pin-modal-header">
         <h2>Accesso Area Titolare</h2>
-        <p class="helper-text">Inserisci il codice PIN per sbloccare la generazione turni, i punteggi e le impostazioni.</p>
+        <p class="helper-text">Inserisci il codice PIN per sbloccare la generazione turni, la pubblicazione e il lettore punti.</p>
       </div>
       <div class="pin-input-group">
         <label for="pinCodeInput">Codice PIN</label>
@@ -88,7 +83,7 @@
           pattern="[0-9]*"
           maxlength="8"
           placeholder="Inserisci PIN"
-           autocomplete="current-password"
+          autocomplete="current-password"
         />
         <p id="pinErrorMsg" class="pin-error" hidden>Codice PIN non valido. Riprova.</p>
       </div>
@@ -99,41 +94,182 @@
     </form>
   </dialog>
 
+  <!-- DIALOG CHIUSURA MESE & LETTORE PUNTI -->
+  <dialog id="closeMonthModal" class="pin-dialog close-month-dialog" closedby="any">
+    <div class="pin-form">
+      <div class="pin-modal-header">
+        <h2>Fase 3: Lettore Punti e Chiusura Mese</h2>
+        <p class="helper-text" id="closeMonthDesc">
+          Il Lettore Punti ha calcolato i turni e i punti definitivi dal calendario reale (inclusi tutti gli scambi e sostituzioni dei dipendenti).
+        </p>
+      </div>
+      <div class="table-responsive">
+        <table class="data-table compact-table" id="closeMonthPreviewTable">
+          <thead>
+            <tr>
+              <th>Collaboratore</th>
+              <th>Turni Finali</th>
+              <th>Punti Finali Letti</th>
+              <th>% Equità</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <label class="checkbox-row">
+        <input type="checkbox" id="chkAdvanceNextMonth" checked />
+        <span>Avanza automaticamente le date al mese successivo e prepara la nuova Bozza</span>
+      </label>
+      <div class="pin-modal-actions">
+        <button type="button" id="btnCancelCloseMonth" class="btn btn-outline">Annulla</button>
+        <button type="button" id="btnConfirmCloseMonth" class="btn btn-primary">Congela Punti e Chiudi Mese</button>
+      </div>
+    </div>
+  </dialog>
+
   <main class="main-container">
+    <!-- BARRA FLUSSO A 3 FASI DEL TITOLARE -->
+    <section id="adminLifecycleBar" class="lifecycle-bar admin-only" hidden aria-label="Ciclo mensile a 3 fasi">
+      <div class="lifecycle-step" id="stepCard1">
+        <div class="step-head">
+          <span class="step-num">1</span>
+          <strong>Bozza Titolare</strong>
+        </div>
+        <p class="step-desc">Genera la 1ª bozza dai parametri e rifinisci chiusure, festivi e slot (invisibile ai dipendenti).</p>
+        <div class="step-actions">
+          <button type="button" id="btnGenerate" class="btn btn-primary">Genera / Rigenera Bozza</button>
+          <button type="button" id="btnBackToDraft" class="btn btn-outline" hidden>Torna in Bozza</button>
+        </div>
+      </div>
+
+      <div class="lifecycle-step" id="stepCard2">
+        <div class="step-head">
+          <span class="step-num">2</span>
+          <strong>Pubblicazione &amp; Scambi</strong>
+        </div>
+        <p class="step-desc">Sblocca la visibilità ai dipendenti e consenti scambi o sostituzioni in tempo reale (2ª versione).</p>
+        <div class="step-actions">
+          <button type="button" id="btnPublishSchedule" class="btn btn-secondary">Pubblica ai Dipendenti</button>
+        </div>
+      </div>
+
+      <div class="lifecycle-step" id="stepCard3">
+        <div class="step-head">
+          <span class="step-num">3</span>
+          <strong>Chiusura Mese &amp; Lettore Punti</strong>
+        </div>
+        <p class="step-desc">A fine mese il Lettore Punti legge il calendario definitivo post-scambi, salva lo storico e avanza mese.</p>
+        <div class="step-actions">
+          <button type="button" id="btnOpenCloseMonth" class="btn btn-outline">Chiudi Mese (Lettore Punti)</button>
+        </div>
+      </div>
+    </section>
+
     <!-- TAB 1: CALENDARIO -->
     <section id="tab-calendario" class="tab-panel active">
       <div class="calendar-layout">
         <div class="calendar-main">
           <div class="panel-header">
             <div>
-              <h2>Griglia Calendario Mensile</h2>
+              <h2 id="calendarMainTitle">Griglia Calendario Mensile</h2>
               <p class="helper-text" id="calendarHelperText">
                 Seleziona il tuo nome in alto per evidenziare i tuoi turni. Per inserire le date in cui non puoi lavorare, apri la scheda <strong>2. Segna Assenze / Ferie</strong>.
               </p>
             </div>
           </div>
           <div id="calendarWarnings" class="warnings-box admin-only" hidden></div>
+
+          <!-- Messaggio mostrato ai dipendenti quando il calendario è ancora in Fase 1 (Bozza) -->
+          <div id="draftLockedNotice" class="draft-locked-box" hidden>
+            <h3>Calendario in fase di preparazione (Bozza Titolare)</h3>
+            <p>
+              Il titolare sta preparando e rifinendo i turni del mese (<strong id="draftMonthName"></strong>). Il calendario diventerà visibile qui non appena verrà ufficialmente pubblicato.
+            </p>
+            <div class="draft-locked-actions">
+              <button type="button" id="btnGoToFerie" class="btn btn-primary">Segna le tue Assenze / Ferie</button>
+              <button type="button" id="btnGoToIndisp" class="btn btn-outline">Verifica Indisponibilità Fisse</button>
+            </div>
+          </div>
+
           <div id="calendarGridContainer" class="calendar-weeks"></div>
         </div>
 
         <aside class="calendar-sidebar">
+          <!-- PANNELLO SCAMBIO O SOSTITUZIONE TURNO (Dipendenti in Fase 2 + Titolare) -->
+          <div class="card" id="swapPanelCard">
+            <h3>Scambio o Sostituzione Turno</h3>
+            <p class="helper-text" id="swapPanelHelper">
+              Effettua una sostituzione singola o uno scambio tra due giorni. Il calendario definitivo si aggiorna in tempo reale.
+            </p>
+
+            <div class="swap-mode-tabs">
+              <button type="button" class="swap-mode-btn active" data-swap-mode="sub">Sostituzione</button>
+              <button type="button" class="swap-mode-btn" data-swap-mode="swap">Scambio 2 Turni</button>
+            </div>
+
+            <!-- Form Sostituzione: Persona A cede il turno a Persona B in una data -->
+            <div id="swapSubBox" class="swap-form-box">
+              <div class="control-group">
+                <label for="subDateSelect">Giorno del turno</label>
+                <select id="subDateSelect"></select>
+              </div>
+              <div class="control-group">
+                <label for="subOutStaffSelect">Chi cede il turno (attualmente in turno)</label>
+                <select id="subOutStaffSelect"></select>
+              </div>
+              <div class="control-group">
+                <label for="subInStaffSelect">Chi subentra al suo posto</label>
+                <select id="subInStaffSelect"></select>
+              </div>
+              <button type="button" id="btnApplySub" class="btn btn-primary">Applica Sostituzione</button>
+            </div>
+
+            <!-- Form Scambio alla pari tra 2 date -->
+            <div id="swapDoubleBox" class="swap-form-box" hidden>
+              <div class="control-group">
+                <label for="swapDate1Select">Primo Giorno</label>
+                <select id="swapDate1Select"></select>
+              </div>
+              <div class="control-group">
+                <label for="swapStaff1Select">1° Collaboratore (in turno nel 1° giorno)</label>
+                <select id="swapStaff1Select"></select>
+              </div>
+              <div class="control-group">
+                <label for="swapDate2Select">Secondo Giorno</label>
+                <select id="swapDate2Select"></select>
+              </div>
+              <div class="control-group">
+                <label for="swapStaff2Select">2° Collaboratore (in turno nel 2° giorno)</label>
+                <select id="swapStaff2Select"></select>
+              </div>
+              <button type="button" id="btnApplySwap" class="btn btn-primary">Applica Scambio alla Pari</button>
+            </div>
+
+            <p id="swapFeedbackMsg" class="swap-feedback" hidden></p>
+
+            <div class="swap-log-section">
+              <h4> Storico Scambi / Modifiche del Mese (<span id="swapCountBadge">0</span>)</h4>
+              <ul id="swapHistoryList" class="swap-log-list"></ul>
+            </div>
+          </div>
+
           <!-- Card visibile ai dipendenti -->
           <div class="card" id="staffPersonalCard">
             <h3>Guida Rapida Dipendente</h3>
             <p class="helper-text">Come consultare i turni e comunicare le tue disponibilità:</p>
             <ul class="legend-list">
               <li><strong>Evidenzia i tuoi turni:</strong> scegli il tuo nome dal menu in alto a destra.</li>
-              <li><strong>Assenze / Ferie:</strong> vai nella scheda <em>2. Segna Assenze / Ferie</em> e clicca sulla tua casella nel giorno in cui non ci sei.</li>
-              <li><strong>Giorni fissi:</strong> nella scheda <em>3. Indisponibilità Fisse</em> trovi i giorni della settimana in cui non dai disponibilità.</li>
+              <li><strong>Scambi o Sostituzioni:</strong> quando il calendario è pubblicato, usa il riquadro qui sopra per farti sostituire o scambiare un turno.</li>
+              <li><strong>Assenze / Ferie:</strong> prima della pubblicazione, segna nella scheda <em>2. Segna Assenze / Ferie</em> i giorni in cui non ci sei.</li>
             </ul>
             <div id="staffShiftCountBox" class="staff-shift-summary" hidden></div>
           </div>
 
           <!-- Card visibile solo al Titolare (Admin) -->
           <div class="card admin-only" id="adminSummaryCard" hidden>
-            <h3>Bilanciamento Mese (Metodo Max Potenziale)</h3>
+            <h3>Lettore Punti in Tempo Reale</h3>
             <p class="helper-text">
-              I punti effettivi sono rapportati al <strong>Massimo Punteggio Potenziale</strong> che ciascuno può raggiungere nei propri giorni disponibili.
+              Legge il calendario attivo (inclusi eventuali scambi) e rapporta i punti al <strong>Massimo Potenziale</strong> di ciascuno.
             </p>
             <div class="table-responsive">
               <table class="data-table compact-table" id="liveSummaryTable">
@@ -197,7 +333,7 @@
         <div class="panel-header">
           <div>
             <h2>Indisponibilità Settimanali Fisse</h2>
-            <p class="helper-text">Giorni fissi della settimana in cui il collaboratore non può essere inserito in turno (<strong>X</strong> = Indisponibile).</p>
+            <p class="helper-text">Giorni fissi della settimana in cui il collaboratore non lavora fuori come fattorino (es. Gigi/Pier disponibile come fattorino solo Martedì e Mercoledì).</p>
           </div>
         </div>
         <div class="table-responsive">
@@ -214,8 +350,10 @@
       <div class="two-col-grid">
         <div class="card">
           <div class="panel-header">
-            <h2>Riepilogo Turni (Storico Mensile)</h2>
-            <p class="helper-text">Storico turni effettuati per mese (include i dati di <code>ott 2026</code> del foglio originale).</p>
+            <div>
+              <h2>Riepilogo Turni (Storico Mensile)</h2>
+              <p class="helper-text">Storico turni definitivi congelati dal Lettore Punti a fine mese.</p>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="data-table" id="historyShiftsTable">
@@ -228,8 +366,10 @@
 
         <div class="card">
           <div class="panel-header">
-            <h2>Classifica Punti (Storico Mensile)</h2>
-            <p class="helper-text">Storico punti fatica accumulati per mese (obiettivo: livellare i punti tra i collaboratori full-time).</p>
+            <div>
+              <h2>Classifica Punti Letti (Storico Mensile)</h2>
+              <p class="helper-text">Punti effettivi letti a fine mese dopo scambi e sostituzioni, usati per dare priorità nel mese successivo.</p>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="data-table" id="historyPointsTable">
@@ -248,19 +388,30 @@
         <div class="card">
           <div class="panel-header">
             <div>
-              <h2>Impostazioni Collaboratori</h2>
-              <p class="helper-text">Target turni su 4 settimane (tot. 88), su 5 settimane (tot. 110) e punti di partenza.</p>
+              <h2>1. Impostazioni Iniziali e Filtri Dipendenti</h2>
+              <p class="helper-text">
+                Configura dipendenti, ruolo (Full-time interno con Mar/Mer fattorino vs Part-time), target turni e punti di partenza.
+              </p>
             </div>
-            <button id="btnAddStaff" class="btn btn-outline">+ Aggiungi Persona</button>
+            <div class="settings-header-actions">
+              <select id="staffRoleFilterSelect" class="filter-select" aria-label="Filtra per contratto">
+                <option value="all">Tutti i ruoli</option>
+                <option value="full_time_combo">Full-time Interno (Mar/Mer Fattorino)</option>
+                <option value="part_time">Part-time Fattorino</option>
+                <option value="weekend_only">Part-time Weekend</option>
+              </select>
+              <button type="button" id="btnAddStaff" class="btn btn-outline">+ Aggiungi Persona</button>
+            </div>
           </div>
           <div class="table-responsive">
             <table class="data-table" id="settingsStaffTable">
               <thead>
                 <tr>
                   <th>Collaboratore</th>
+                  <th>Filtro / Ruolo</th>
                   <th>Target 4 Sett.</th>
                   <th>Target 5 Sett.</th>
-                  <th>Punti Storico (Col. D)</th>
+                  <th>Punti Storico</th>
                   <th>Azioni</th>
                 </tr>
               </thead>
@@ -272,8 +423,8 @@
 
         <div class="card">
           <div class="panel-header">
-            <h2>Pesi Giorni e Regole Algoritmo</h2>
-            <p class="helper-text">Configura i punti assegnati a ciascun giorno, il fabbisogno di personale e le regole del generatore.</p>
+            <h2>Pesi Giorni e Regole Ciclo Mensile</h2>
+            <p class="helper-text">Configura i punti assegnati a ciascun giorno, il fabbisogno di personale e i permessi di scambio.</p>
           </div>
           <div class="table-responsive">
             <table class="data-table" id="weightsTable">
@@ -290,17 +441,21 @@
           </div>
 
           <div class="algo-options">
-            <h3>Opzioni Logica di Generazione</h3>
+            <h3>Opzioni Logica e Scambi Dipendenti</h3>
             <label class="checkbox-row">
-              <input type="checkbox" id="optUseHistoricalPoints" />
-              <span>Bilancia i punti sommando anche lo storico pregresso (Colonna D Impostazioni) invece di partire da zero ogni mese</span>
+              <input type="checkbox" id="optAllowEmployeeSwaps" checked />
+              <span>Consenti ai dipendenti di effettuare Scambi o Sostituzioni in tempo reale quando il calendario è Pubblicato</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" id="optUseHistoricalPoints" checked />
+              <span>Usa i punti congelati dal Lettore Punti nel mese precedente per dare priorità nel mese successivo</span>
             </label>
             <label class="checkbox-row">
               <input type="checkbox" id="optAvoidBackToBackWeekend" checked />
-              <span>Distribuisci equamente le Domeniche (5 pt) tra i disponibili prima degli altri giorni</span>
+              <span>Distribuisci equamente Domeniche (5 pt) e Festivi (12 pt) prima degli altri giorni</span>
             </label>
             <div class="reset-zone">
-              <button id="btnResetDefaults" class="btn btn-outline">Ripristina Dati Originali Foglio Google</button>
+              <button type="button" id="btnResetDefaults" class="btn btn-outline">Ripristina Dati Originali Foglio Google</button>
             </div>
           </div>
         </div>
@@ -308,6 +463,6 @@
     </section>
   </main>
 
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

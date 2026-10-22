@@ -919,7 +919,8 @@ p, li, .helper-text {
   .topbar-actions,
   .tabs-nav,
   .calendar-sidebar,
-  .helper-text {
+  .helper-text,
+  .lifecycle-bar {
     display: none !important;
   }
   .calendar-layout {
@@ -930,5 +931,318 @@ p, li, .helper-text {
     border: none;
     box-shadow: none;
     padding: 0;
+  }
+}
+
+/* ==========================================
+   3-PHASE WORKFLOW, SWAPS & LETTORE PUNTI
+   ========================================== */
+.phase-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.phase-draft {
+  background: var(--col-special-bg);
+  color: var(--col-special);
+  border: 1px solid #f59e0b;
+}
+
+.phase-published {
+  background: var(--col-weekday-bg);
+  color: var(--col-weekday);
+  border: 1px solid #34d399;
+}
+
+.btn-publish {
+  background: var(--col-weekday);
+  color: #ffffff;
+}
+
+.btn-publish:hover {
+  background: #047857;
+}
+
+.btn-close-month {
+  background: #1e293b;
+  color: #ffffff;
+}
+
+.btn-close-month:hover {
+  background: #0f172a;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+}
+
+.btn-full {
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.lifecycle-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.lifecycle-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  opacity: 0.7;
+  transition: all 0.15s ease;
+}
+
+.lifecycle-step.is-active {
+  opacity: 1;
+  border-color: var(--primary);
+  background: #fff5f5;
+  box-shadow: var(--shadow-sm);
+}
+
+.lifecycle-step.is-done {
+  opacity: 0.9;
+  border-color: #34d399;
+  background: #ecfdf5;
+}
+
+.step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface-alt);
+  color: var(--text);
+  font-weight: 800;
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+
+.lifecycle-step.is-active .step-num {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.lifecycle-step.is-done .step-num {
+  background: var(--col-weekday);
+  color: #fff;
+  border-color: var(--col-weekday);
+}
+
+.lifecycle-step strong {
+  display: block;
+  font-size: 0.85rem;
+  margin-bottom: 0.15rem;
+}
+
+.lifecycle-step p {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.draft-locked-box {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  background: #fffbeb;
+  border: 2px dashed #f59e0b;
+  border-radius: var(--radius);
+  margin: 0.5rem 0;
+}
+
+.draft-locked-icon {
+  font-size: 2.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.draft-locked-box h3 {
+  font-size: 1.1rem;
+  color: #92400e;
+  margin-bottom: 0.4rem;
+}
+
+.draft-locked-box p {
+  font-size: 0.9rem;
+  color: #78350f;
+  max-width: 540px;
+  margin: 0 auto 0.4rem;
+}
+
+.swap-card {
+  border-top: 3px solid var(--accent);
+}
+
+.swap-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.swap-mode-btn {
+  padding: 0.45rem 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.swap-mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.swap-form-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.swap-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.swap-field label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.swap-feedback {
+  margin-top: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.swap-feedback.is-ok {
+  background: var(--col-weekday-bg);
+  color: var(--col-weekday);
+  border: 1px solid #6ee7b7;
+}
+
+.swap-feedback.is-err {
+  background: var(--col-sunday-bg);
+  color: var(--col-sunday);
+  border: 1px solid #fca5a5;
+}
+
+.swap-history-box {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.swap-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.btn-link-undo {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.swap-log-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 150px;
+  overflow-y: auto;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.swap-log-list li {
+  padding: 0.35rem 0.5rem;
+  background: var(--surface-alt);
+  border-radius: 4px;
+  border-left: 3px solid var(--accent);
+}
+
+.settings-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  background: var(--surface);
+}
+
+.role-select-inline {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.78rem;
+  background: var(--surface);
+  max-width: 210px;
+}
+
+.close-month-dialog {
+  max-width: 680px;
+}
+
+.close-month-next-box {
+  margin-top: 0.9rem;
+  padding: 0.75rem;
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.close-month-next-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 900px) {
+  .lifecycle-bar {
+    grid-template-columns: 1fr;
+  }
+  .close-month-next-grid {
+    grid-template-columns: 1fr;
   }
 }
