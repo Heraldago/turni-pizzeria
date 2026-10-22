@@ -88,6 +88,8 @@ function getDefaultState() {
     },
     // dayOverrides["YYYY-MM-DD"] = "normal" | "special" | "closed"
     dayOverrides: {},
+    // daySlotOverrides["YYYY-MM-DD"] = number of slots override for a specific date
+    daySlotOverrides: {},
     // assignments["YYYY-MM-DD"] = array of staffId for each slot
     assignments: {},
     // Registro scambi/sostituzioni del mese corrente
@@ -132,6 +134,7 @@ function loadState() {
       const merged = Object.assign(def, parsed);
       merged.options = Object.assign(def.options, parsed.options || {});
       if (!Array.isArray(merged.swapLog)) merged.swapLog = [];
+      if (!merged.daySlotOverrides) merged.daySlotOverrides = {};
       if (!merged.schedulePhase) merged.schedulePhase = "published";
       merged.staff = (merged.staff || def.staff).map((p) => ({
         contractType: p.id === "pier" ? "full_time_combo" : p.id === "mattia" ? "weekend_only" : "part_time",
@@ -302,39 +305,101 @@ function getEffectiveDayMode(iso, dayIndex) {
 function getDayMeta(iso, dayIndex) {
   const { mode, holidayName } = getEffectiveDayMode(iso, dayIndex);
   const baseCfg = state.dayConfig[dayIndex] || { weight: 0, slots: 0 };
+  const hasSlotOverride = state.daySlotOverrides && state.daySlotOverrides[iso] !== undefined;
+  const overrideSlots = hasSlotOverride ? Math.max(0, Number(state.daySlotOverrides[iso])) : null;
 
+  let baseMeta;
   if (mode === "closed") {
-    return {
+    baseMeta = {
       mode: "closed",
       slots: 0,
       weight: 0,
       label: holidayName ? `Chiuso (${holidayName})` : "Chiuso",
       holidayName
     };
-  }
-
-  if (mode === "special") {
+  } else if (mode === "special") {
     const slots = Number(baseCfg.slots) > 0 ? Number(baseCfg.slots) : Number(state.dayConfig.special.slots) || 5;
-    return {
+    baseMeta = {
       mode: "special",
       slots,
       weight: Number(state.dayConfig.special.weight) || 12,
       label: holidayName || "Festivo",
       holidayName
     };
+  } else if (Number(baseCfg.slots) === 0) {
+    baseMeta = { mode: "closed", slots: 0, weight: 0, label: "Chiuso", holidayName };
+  } else {
+    baseMeta = {
+      mode: "normal",
+      slots: Number(baseCfg.slots) || 0,
+      weight: Number(baseCfg.weight) || 0,
+      label: DAY_NAMES[dayIndex],
+      holidayName
+    };
   }
 
-  if (Number(baseCfg.slots) === 0) {
-    return { mode: "closed", slots: 0, weight: 0, label: "Chiuso", holidayName };
+  if (hasSlotOverride) {
+    if (overrideSlots === 0) {
+      return {
+        mode: "closed",
+        slots: 0,
+        weight: 0,
+        label: holidayName ? `Chiuso (${holidayName})` : "Chiuso",
+        holidayName,
+        isCustomSlots: true
+      };
+    }
+    if (baseMeta.mode === "closed") {
+      const openedMode = holidayName ? "special" : "normal";
+      const openedWeight = holidayName
+        ? Number(state.dayConfig.special.weight) || 12
+        : Number(baseCfg.weight) || 3;
+      return {
+        mode: openedMode,
+        slots: overrideSlots,
+        weight: openedWeight,
+        label: holidayName || DAY_NAMES[dayIndex],
+        holidayName,
+        isCustomSlots: true
+      };
+    }
+    return {
+      ...baseMeta,
+      slots: overrideSlots,
+      isCustomSlots: true
+    };
   }
 
-  return {
-    mode: "normal",
-    slots: Number(baseCfg.slots) || 0,
-    weight: Number(baseCfg.weight) || 0,
-    label: DAY_NAMES[dayIndex],
-    holidayName
-  };
+  return baseMeta;
+}
+
+function adjustDateSlots(iso, delta) {
+  if (!iso) return;
+  const dayIndex = getMondayWeekdayIndex(iso);
+  const curMeta = getDayMeta(iso, dayIndex);
+  const nextSlots = Math.max(0, Math.min(15, curMeta.slots + delta));
+  if (!state.daySlotOverrides) state.daySlotOverrides = {};
+  state.daySlotOverrides[iso] = nextSlots;
+
+  const curAssigned = state.assignments[iso] ? [...state.assignments[iso]] : [];
+  if (curAssigned.length > nextSlots) {
+    state.assignments[iso] = curAssigned.slice(0, nextSlots);
+  } else {
+    while (curAssigned.length < nextSlots) {
+      curAssigned.push("");
+    }
+    state.assignments[iso] = curAssigned;
+  }
+
+  saveState();
+  renderAll();
+}
+
+function resetDateSlots(iso) {
+  if (!iso || !state.daySlotOverrides) return;
+  delete state.daySlotOverrides[iso];
+  saveState();
+  renderAll();
 }
 
 function isStaffAvailable(staffId, iso, dayIndex) {
@@ -687,6 +752,7 @@ function renderCalendar() {
 
     const weekGrid = document.createElement("div");
     weekGrid.className = "week-grid";
+    const maxRows = Math.max(5, ...weekDays.map((wd) => getDayMeta(wd.iso, wd.dayIndex).slots));
 
     weekDays.forEach((d) => {
       const meta = getDayMeta(d.iso, d.dayIndex);
@@ -707,26 +773,48 @@ function renderCalendar() {
         metaText = meta.holidayName ? `Chiuso (${meta.holidayName})` : "Chiuso";
       } else if (isAdmin) {
         const specTag = meta.mode === "special" ? ` - ${meta.label}` : "";
-        metaText = `${meta.slots} pers. / ${meta.weight} pt${specTag}`;
+        metaText = `${meta.slots}p / ${meta.weight}pt${specTag}`;
       } else {
         const specTag = meta.mode === "special" ? ` (${meta.label})` : "";
         metaText = `${meta.slots} pers.${specTag}`;
       }
 
-      header.innerHTML = `
-        <span>${d.shortDay} ${formatDisplayDate(d.iso)}</span>
-        <span class="day-header-meta">${metaText}</span>
-      `;
-
       if (isAdmin) {
+        header.innerHTML = `
+          <div class="day-header-top">
+            <span>${d.shortDay} ${formatDisplayDate(d.iso)}</span>
+            <div class="day-slot-stepper" title="Togli o aggiungi un turno in questo giorno">
+              <button type="button" class="day-slot-btn" data-slot-delta="-1" aria-label="Togli turno">-</button>
+              <button type="button" class="day-slot-btn" data-slot-delta="1" aria-label="Aggiungi turno">+</button>
+            </div>
+          </div>
+          <span class="day-header-meta">${metaText}</span>
+        `;
+
         header.title = `Clicca per cambiare stato giorno: Normale / Festivo (${state.dayConfig.special.weight} pt) / Chiuso`;
+        header.querySelectorAll(".day-slot-btn").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const delta = Number(btn.dataset.slotDelta);
+            adjustDateSlots(d.iso, delta);
+          });
+        });
+
         header.addEventListener("click", () => {
           const cur = getEffectiveDayMode(d.iso, d.dayIndex).mode;
           const next = cur === "normal" ? "special" : cur === "special" ? "closed" : "normal";
           state.dayOverrides[d.iso] = next;
+          if (state.daySlotOverrides) {
+            delete state.daySlotOverrides[d.iso];
+          }
           saveState();
           renderAll();
         });
+      } else {
+        header.innerHTML = `
+          <span>${d.shortDay} ${formatDisplayDate(d.iso)}</span>
+          <span class="day-header-meta">${metaText}</span>
+        `;
       }
 
       col.appendChild(header);
@@ -734,7 +822,6 @@ function renderCalendar() {
       const slotsList = document.createElement("div");
       slotsList.className = "slots-list";
 
-      const maxRows = 5;
       const dayAssigned = state.assignments[d.iso] || [];
 
       for (let s = 0; s < maxRows; s++) {
@@ -1213,6 +1300,55 @@ function renderHistoryTables() {
   `;
 }
 
+function syncAssignmentsWithDayConfig() {
+  const dates = getCalendarDates();
+  dates.forEach((d) => {
+    const meta = getDayMeta(d.iso, d.dayIndex);
+    const cur = state.assignments[d.iso] ? [...state.assignments[d.iso]] : [];
+    if (cur.length > meta.slots) {
+      state.assignments[d.iso] = cur.slice(0, meta.slots);
+    } else if (cur.length < meta.slots) {
+      while (cur.length < meta.slots) {
+        cur.push("");
+      }
+      state.assignments[d.iso] = cur;
+    }
+  });
+}
+
+function renderSingleDateSlotControls() {
+  const dateSelect = document.getElementById("customSlotDateSelect");
+  const badge = document.getElementById("customSlotCurrentBadge");
+  const resetBtn = document.getElementById("btnResetDaySlot");
+  if (!dateSelect || !badge) return;
+
+  const dates = getCalendarDates();
+  const prevIso = dateSelect.value;
+  dateSelect.innerHTML = "";
+
+  dates.forEach((d, idx) => {
+    const meta = getDayMeta(d.iso, d.dayIndex);
+    const opt = document.createElement("option");
+    opt.value = d.iso;
+    const customTag = state.daySlotOverrides && state.daySlotOverrides[d.iso] !== undefined ? " *" : "";
+    opt.textContent = `${d.shortDay} ${formatDisplayDate(d.iso)} - ${meta.slots} turni${customTag}`;
+    if (prevIso ? d.iso === prevIso : idx === 0) {
+      opt.selected = true;
+    }
+    dateSelect.appendChild(opt);
+  });
+
+  const activeIso = dateSelect.value;
+  if (activeIso) {
+    const dayIdx = getMondayWeekdayIndex(activeIso);
+    const meta = getDayMeta(activeIso, dayIdx);
+    badge.textContent = meta.slots === 0 ? "Chiuso (0 turni)" : `${meta.slots} ${meta.slots === 1 ? "turno" : "turni"}`;
+    if (resetBtn) {
+      resetBtn.hidden = !(state.daySlotOverrides && state.daySlotOverrides[activeIso] !== undefined);
+    }
+  }
+}
+
 function renderSettingsAndWeights() {
   const staffBody = document.querySelector("#settingsStaffTable tbody");
   const staffFoot = document.querySelector("#settingsStaffTable tfoot");
@@ -1247,17 +1383,29 @@ function renderSettingsAndWeights() {
           <option value="weekend_only" ${cType === "weekend_only" ? "selected" : ""}>Part-time Weekend</option>
         </select>
       </td>
-      <td><input type="number" min="0" max="35" class="input-inline" value="${p.target4}" data-idx="${idx}" data-field="target4" /></td>
-      <td><input type="number" min="0" max="35" class="input-inline" value="${p.target5}" data-idx="${idx}" data-field="target5" /></td>
+      <td>
+        <div class="stepper-inline">
+          <button type="button" class="btn-step" data-idx="${idx}" data-field="target4" data-delta="-1" title="Togli 1 turno (4 sett.)">-</button>
+          <input type="number" min="0" max="35" class="input-inline" value="${p.target4}" data-idx="${idx}" data-field="target4" />
+          <button type="button" class="btn-step" data-idx="${idx}" data-field="target4" data-delta="1" title="Aggiungi 1 turno (4 sett.)">+</button>
+        </div>
+      </td>
+      <td>
+        <div class="stepper-inline">
+          <button type="button" class="btn-step" data-idx="${idx}" data-field="target5" data-delta="-1" title="Togli 1 turno (5 sett.)">-</button>
+          <input type="number" min="0" max="35" class="input-inline" value="${p.target5}" data-idx="${idx}" data-field="target5" />
+          <button type="button" class="btn-step" data-idx="${idx}" data-field="target5" data-delta="1" title="Aggiungi 1 turno (5 sett.)">+</button>
+        </div>
+      </td>
       <td><input type="number" min="0" class="input-inline" value="${p.basePoints}" data-idx="${idx}" data-field="basePoints" /></td>
-      <td><button type="button" class="btn btn-outline btn-remove-staff" data-idx="${idx}">Rimuovi</button></td>
+      <td><button type="button" class="btn btn-outline btn-remove-staff" data-idx="${idx}">Togli</button></td>
     `;
     staffBody.appendChild(tr);
   });
 
   staffFoot.innerHTML = `
     <tr>
-      <td>TOTALE FILTRATO</td>
+      <td>TOTALE (${state.staff.length} pers.)</td>
       <td>-</td>
       <td>${sum4}</td>
       <td>${sum5}</td>
@@ -1271,16 +1419,29 @@ function renderSettingsAndWeights() {
       const idx = Number(e.target.dataset.idx);
       const field = e.target.dataset.field;
       if (field === "name") {
-        state.staff[idx].name = e.target.value.trim();
+        state.staff[idx].name = e.target.value.trim() || state.staff[idx].name;
       } else if (field === "contractType") {
         state.staff[idx].contractType = e.target.value;
-        // Se si imposta Full-time Interno (Mar/Mer Fattorino), pre-imposta Gio-Dom come non disponibili se vuoti
         if (e.target.value === "full_time_combo") {
           state.unavailability[state.staff[idx].id] = [3, 4, 5, 6];
+        } else if (e.target.value === "weekend_only") {
+          state.unavailability[state.staff[idx].id] = [1, 2, 3];
         }
       } else {
-        state.staff[idx][field] = Number(e.target.value);
+        state.staff[idx][field] = Math.max(0, Number(e.target.value) || 0);
       }
+      saveState();
+      renderAll();
+    });
+  });
+
+  staffBody.querySelectorAll(".btn-step").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.idx);
+      const field = btn.dataset.field;
+      const delta = Number(btn.dataset.delta);
+      const curVal = Number(state.staff[idx][field]) || 0;
+      state.staff[idx][field] = Math.max(0, Math.min(35, curVal + delta));
       saveState();
       renderAll();
     });
@@ -1288,9 +1449,24 @@ function renderSettingsAndWeights() {
 
   staffBody.querySelectorAll(".btn-remove-staff").forEach((btn) => {
     btn.addEventListener("click", (e) => {
-      const idx = Number(e.target.dataset.idx);
+      const idx = Number(e.currentTarget.dataset.idx);
       if (state.staff.length <= 1) return;
+      const removed = state.staff[idx];
       state.staff.splice(idx, 1);
+
+      if (removed) {
+        delete state.unavailability[removed.id];
+        Object.keys(state.holidays || {}).forEach((iso) => {
+          state.holidays[iso] = (state.holidays[iso] || []).filter((id) => id !== removed.id);
+        });
+        Object.keys(state.assignments || {}).forEach((iso) => {
+          state.assignments[iso] = (state.assignments[iso] || []).map((id) => (id === removed.id ? "" : id));
+        });
+        if (highlightedStaffId === removed.id) {
+          highlightedStaffId = "";
+        }
+      }
+
       saveState();
       renderAll();
     });
@@ -1306,7 +1482,8 @@ function renderSettingsAndWeights() {
     const tr = document.createElement("tr");
     const totalDayPts = (Number(cfg.weight) || 0) * (Number(cfg.slots) || 0);
     let badgeClass = "badge-weekday";
-    if (k === 0 || Number(cfg.slots) === 0) badgeClass = "badge-closed";
+    if (k === 0 && Number(cfg.slots) === 0) badgeClass = "badge-closed";
+    else if (Number(cfg.slots) === 0) badgeClass = "badge-closed";
     else if (k === "special") badgeClass = "badge-special";
     else if (k === 6) badgeClass = "badge-sunday";
     else if (k === 4 || k === 5) badgeClass = "badge-FriSat";
@@ -1314,7 +1491,13 @@ function renderSettingsAndWeights() {
     tr.innerHTML = `
       <td><span class="badge ${badgeClass}">${cfg.label}</span></td>
       <td><input type="number" min="0" max="50" class="input-inline" value="${cfg.weight}" data-key="${k}" data-field="weight" /></td>
-      <td><input type="number" min="0" max="5" class="input-inline" value="${cfg.slots}" data-key="${k}" data-field="slots" /></td>
+      <td>
+        <div class="stepper-inline">
+          <button type="button" class="btn-weight-step" data-key="${k}" data-delta="-1" title="Togli 1 turno/persona">-</button>
+          <input type="number" min="0" max="15" class="input-inline" value="${cfg.slots}" data-key="${k}" data-field="slots" />
+          <button type="button" class="btn-weight-step" data-key="${k}" data-delta="1" title="Aggiungi 1 turno/persona">+</button>
+        </div>
+      </td>
       <td><strong>${totalDayPts} pt</strong></td>
     `;
     weightsBody.appendChild(tr);
@@ -1324,11 +1507,28 @@ function renderSettingsAndWeights() {
     inp.addEventListener("change", (e) => {
       const k = e.target.dataset.key;
       const field = e.target.dataset.field;
-      state.dayConfig[k][field] = Number(e.target.value);
+      state.dayConfig[k][field] = Math.max(0, Number(e.target.value) || 0);
+      if (field === "slots") {
+        syncAssignmentsWithDayConfig();
+      }
       saveState();
       renderAll();
     });
   });
+
+  weightsBody.querySelectorAll(".btn-weight-step").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const k = btn.dataset.key;
+      const delta = Number(btn.dataset.delta);
+      const curSlots = Number(state.dayConfig[k].slots) || 0;
+      state.dayConfig[k].slots = Math.max(0, Math.min(15, curSlots + delta));
+      syncAssignmentsWithDayConfig();
+      saveState();
+      renderAll();
+    });
+  });
+
+  renderSingleDateSlotControls();
 
   document.getElementById("optUseHistoricalPoints").checked = !!state.options.useHistoricalPoints;
   document.getElementById("optAvoidBackToBackWeekend").checked = !!state.options.prioritizeHighWeightDays;
@@ -1397,6 +1597,7 @@ function confirmCloseMonthAndAdvance() {
   state.monthLabel = (nextLabelInput && nextLabelInput.value.trim()) || nextMonthLabel;
   state.holidays = {};
   state.dayOverrides = {};
+  state.daySlotOverrides = {};
   state.swapLog = [];
   state.schedulePhase = "draft";
 
@@ -1412,9 +1613,10 @@ function exportCsv() {
 
   for (let w = 0; w < state.weeksCount; w++) {
     const weekDays = dates.slice(w * 7, (w + 1) * 7);
+    const maxSlots = Math.max(5, ...weekDays.map((d) => getDayMeta(d.iso, d.dayIndex).slots));
     rows.push(weekDays.map((d) => `${d.shortDay} ${formatDisplayDate(d.iso)}`).join(","));
 
-    for (let s = 0; s < 5; s++) {
+    for (let s = 0; s < maxSlots; s++) {
       const slotRow = weekDays.map((d) => {
         const assigned = state.assignments[d.iso] || [];
         const staffId = assigned[s] || "";
@@ -1733,20 +1935,97 @@ function initEvents() {
     });
   }
 
-  document.getElementById("btnAddStaff").addEventListener("click", () => {
+  const newStaffRoleSelect = document.getElementById("newStaffRoleSelect");
+  const newStaffTarget4Input = document.getElementById("newStaffTarget4Input");
+  const newStaffTarget5Input = document.getElementById("newStaffTarget5Input");
+  const newStaffNameInput = document.getElementById("newStaffNameInput");
+
+  if (newStaffRoleSelect && newStaffTarget4Input && newStaffTarget5Input) {
+    newStaffRoleSelect.addEventListener("change", (e) => {
+      const role = e.target.value;
+      if (role === "full_time_combo") {
+        newStaffTarget4Input.value = "8";
+        newStaffTarget5Input.value = "10";
+      } else if (role === "weekend_only") {
+        newStaffTarget4Input.value = "4";
+        newStaffTarget5Input.value = "5";
+      } else {
+        newStaffTarget4Input.value = "13";
+        newStaffTarget5Input.value = "16";
+      }
+    });
+  }
+
+  const handleAddNewStaff = () => {
     const id = "staff_" + Date.now();
+    const rawName = newStaffNameInput ? newStaffNameInput.value.trim() : "";
+    const name = (rawName || `PERSONA ${state.staff.length + 1}`).toUpperCase();
+    const contractType = newStaffRoleSelect ? newStaffRoleSelect.value : "part_time";
+    const target4 = newStaffTarget4Input ? Math.max(0, Number(newStaffTarget4Input.value) || 0) : 13;
+    const target5 = newStaffTarget5Input ? Math.max(0, Number(newStaffTarget5Input.value) || 0) : 16;
+
     state.staff.push({
       id,
-      name: "NUOVO",
-      contractType: "part_time",
-      target4: 13,
-      target5: 16,
+      name,
+      contractType,
+      target4,
+      target5,
       basePoints: 0
     });
-    state.unavailability[id] = [];
+
+    if (contractType === "full_time_combo") {
+      state.unavailability[id] = [3, 4, 5, 6];
+    } else if (contractType === "weekend_only") {
+      state.unavailability[id] = [1, 2, 3];
+    } else {
+      state.unavailability[id] = [];
+    }
+
+    if (newStaffNameInput) {
+      newStaffNameInput.value = "";
+    }
+    staffRoleFilter = "all";
     saveState();
     renderAll();
-  });
+  };
+
+  document.getElementById("btnAddStaff").addEventListener("click", handleAddNewStaff);
+  if (newStaffNameInput) {
+    newStaffNameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        handleAddNewStaff();
+      }
+    });
+  }
+
+  // Gestione Aggiungi / Togli Turno su Singola Data in Tab 5
+  const customSlotDateSelect = document.getElementById("customSlotDateSelect");
+  const btnRemoveDaySlot = document.getElementById("btnRemoveDaySlot");
+  const btnAddDaySlot = document.getElementById("btnAddDaySlot");
+  const btnResetDaySlot = document.getElementById("btnResetDaySlot");
+
+  if (customSlotDateSelect) {
+    customSlotDateSelect.addEventListener("change", renderSingleDateSlotControls);
+  }
+  if (btnRemoveDaySlot) {
+    btnRemoveDaySlot.addEventListener("click", () => {
+      const iso = customSlotDateSelect ? customSlotDateSelect.value : "";
+      if (iso) adjustDateSlots(iso, -1);
+    });
+  }
+  if (btnAddDaySlot) {
+    btnAddDaySlot.addEventListener("click", () => {
+      const iso = customSlotDateSelect ? customSlotDateSelect.value : "";
+      if (iso) adjustDateSlots(iso, 1);
+    });
+  }
+  if (btnResetDaySlot) {
+    btnResetDaySlot.addEventListener("click", () => {
+      const iso = customSlotDateSelect ? customSlotDateSelect.value : "";
+      if (iso) resetDateSlots(iso);
+    });
+  }
 
   document.getElementById("optUseHistoricalPoints").addEventListener("change", (e) => {
     state.options.useHistoricalPoints = e.target.checked;

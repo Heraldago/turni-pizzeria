@@ -638,6 +638,42 @@ input[type="password"] {
   border-top: 4px solid var(--closed-border);
 }
 
+.day-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 0.35rem;
+}
+
+.day-slot-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.day-slot-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+  color: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.day-slot-btn:hover {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.38);
+}
+
 .day-header-meta {
   font-size: 0.7rem;
   font-weight: 600;
@@ -943,16 +979,141 @@ input[type="password"] {
 }
 
 .input-inline {
-  width: 72px;
-  padding: 0.4rem 0.5rem;
+  width: 60px;
+  padding: 0.35rem 0.4rem;
   text-align: center;
   font-size: 0.84rem;
   font-variant-numeric: tabular-nums;
 }
 
 .input-name {
-  width: 120px;
+  width: 115px;
   text-align: left;
+}
+
+.quick-add-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  padding: 0.95rem 1rem;
+  margin-bottom: 1.1rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.quick-add-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1 1 130px;
+}
+
+.quick-add-field.quick-add-num {
+  flex: 0 0 92px;
+}
+
+.quick-add-field label {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.quick-add-field input,
+.quick-add-field select {
+  width: 100%;
+}
+
+.stepper-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-step,
+.btn-weight-step {
+  width: 28px;
+  height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-step:hover,
+.btn-weight-step:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.single-date-slots-box {
+  margin-top: 1.35rem;
+  padding: 1rem 1.1rem;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.single-date-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.single-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1 1 200px;
+}
+
+.single-date-field label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.single-date-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.slot-count-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 82px;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-sm {
+  padding: 0.4rem 0.65rem;
+  font-size: 0.78rem;
 }
 
 .algo-options {

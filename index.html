@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Turni Pizzeria - Gestione e Generatore Equo</title>
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="stylesheet" href="style.css?v=5" />
 </head>
 <body>
   <header class="topbar">
@@ -360,8 +360,8 @@
         <div class="card">
           <div class="panel-header">
             <div>
-              <h2>Collaboratori e Ruoli</h2>
-              <p class="helper-text">Configura contratti, turni target su 4 o 5 settimane e punti di partenza.</p>
+              <h2>Collaboratori e Turni Individuali</h2>
+              <p class="helper-text">Aggiungi o rimuovi persone e regola i turni mensili (`-` / `+`) in qualsiasi momento.</p>
             </div>
             <div class="settings-header-actions">
               <select id="staffRoleFilterSelect" class="filter-select" name="staff_role_filter" aria-label="Filtra per ruolo">
@@ -370,19 +370,44 @@
                 <option value="part_time">Part-time Fattorino</option>
                 <option value="weekend_only">Part-time Weekend</option>
               </select>
-              <button type="button" id="btnAddStaff" class="btn btn-outline">+ Aggiungi</button>
             </div>
           </div>
+
+          <!-- Barra rapida per aggiungere una nuova persona -->
+          <div class="quick-add-bar">
+            <div class="quick-add-field">
+              <label for="newStaffNameInput">Nuova Persona</label>
+              <input type="text" id="newStaffNameInput" placeholder="Es. MARCO" />
+            </div>
+            <div class="quick-add-field">
+              <label for="newStaffRoleSelect">Ruolo / Contratto</label>
+              <select id="newStaffRoleSelect">
+                <option value="part_time">Part-time Fattorino</option>
+                <option value="full_time_combo">Full-time Interno (Mar/Mer Fattorino)</option>
+                <option value="weekend_only">Part-time Weekend</option>
+              </select>
+            </div>
+            <div class="quick-add-field quick-add-num">
+              <label for="newStaffTarget4Input">Turni (4 sett.)</label>
+              <input type="number" id="newStaffTarget4Input" min="0" max="35" value="13" />
+            </div>
+            <div class="quick-add-field quick-add-num">
+              <label for="newStaffTarget5Input">Turni (5 sett.)</label>
+              <input type="number" id="newStaffTarget5Input" min="0" max="35" value="16" />
+            </div>
+            <button type="button" id="btnAddStaff" class="btn btn-primary">+ Aggiungi Persona</button>
+          </div>
+
           <div class="table-responsive">
             <table class="data-table" id="settingsStaffTable">
               <thead>
                 <tr>
                   <th>Nome</th>
                   <th>Ruolo / Contratto</th>
-                  <th>4 Sett.</th>
-                  <th>5 Sett.</th>
+                  <th>Turni 4 Sett.</th>
+                  <th>Turni 5 Sett.</th>
                   <th>Pt Base</th>
-                  <th></th>
+                  <th>Azioni</th>
                 </tr>
               </thead>
               <tbody></tbody>
@@ -393,8 +418,8 @@
 
         <div class="card">
           <div class="card-head">
-            <h2>Pesi Giorni e Regole</h2>
-            <p class="helper-text">Punti e numero di persone richieste per ogni fascia di giornata.</p>
+            <h2>Turni Giornalieri e Pesi</h2>
+            <p class="helper-text">Aggiungi o togli un turno/persona per fascia settimanale o per una data specifica.</p>
           </div>
           <div class="table-responsive">
             <table class="data-table" id="weightsTable">
@@ -402,12 +427,30 @@
                 <tr>
                   <th>Giorno</th>
                   <th>Punti</th>
-                  <th>Persone</th>
+                  <th>Turni / Persone</th>
                   <th>Totale Pt</th>
                 </tr>
               </thead>
               <tbody></tbody>
             </table>
+          </div>
+
+          <!-- Gestione rapida: Aggiungi o togli un turno in una data specifica -->
+          <div class="single-date-slots-box">
+            <h3>Aggiungi o Togli Turno su Data Specifica</h3>
+            <p class="helper-text">Modifica al volo il numero di persone richieste in un singolo giorno del calendario attivo.</p>
+            <div class="single-date-controls">
+              <div class="single-date-field">
+                <label for="customSlotDateSelect">Giorno del mese</label>
+                <select id="customSlotDateSelect" name="custom_slot_date"></select>
+              </div>
+              <div class="single-date-actions">
+                <button type="button" id="btnRemoveDaySlot" class="btn btn-outline" title="Togli 1 turno in questa data">- 1 Turno</button>
+                <span id="customSlotCurrentBadge" class="slot-count-pill">3 turni</span>
+                <button type="button" id="btnAddDaySlot" class="btn btn-outline" title="Aggiungi 1 turno in questa data">+ 1 Turno</button>
+                <button type="button" id="btnResetDaySlot" class="btn btn-outline btn-sm" hidden>Reset</button>
+              </div>
+            </div>
           </div>
 
           <div class="algo-options">
@@ -433,6 +476,6 @@
     </section>
   </main>
 
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
